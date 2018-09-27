@@ -1,5 +1,5 @@
 {
-  "name": "wxapp-webpack-plugin",
+  "name": "miniprogram-webpack-plugin",
   "version": "0.19.0",
   "description": "微信小程序 Webpack 插件",
   "scripts": {
