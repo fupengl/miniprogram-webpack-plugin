@@ -46,7 +46,7 @@ npm i -S miniprogram-webpack-plugin
 开发者也可以根据自身需求和习惯，使用 `sass-loader` 之类的 `loader`。
 
 
-**完整的项目开发脚手架，请查看 [miniprogram-webpack-plugin](https://github.com/fupengl/miniprogram-webpack-plugin)**
+**完整的项目开发脚手架，请查看 [quickstart-miniprogram](https://github.com/fupengl/quickstart-miniprogram.git)**
 
 
 ## API
