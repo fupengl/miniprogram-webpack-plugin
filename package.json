@@ -1,6 +1,6 @@
 {
   "name": "miniprogram-webpack-plugin",
-  "version": "0.19.0",
+  "version": "0.0.1",
   "description": "微信小程序 Webpack 插件",
   "scripts": {
     "start": "jest test --watch",
@@ -18,11 +18,12 @@
     "*.md"
   ],
   "keywords": [
-    "wxapp",
+    "miniprogram",
     "weapp",
     "webpack",
     "webpack-plugin",
-    "plugin"
+    "miniprogram-webpack",
+    "wxapp-webpack"
   ],
   "author": "fupengl",
   "repository": "fupengl/miniprogram-webpack-plugin",
