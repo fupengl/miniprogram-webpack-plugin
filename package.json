@@ -12,7 +12,7 @@
     "build": "babel src -o lib/index.js",
     "preversion": "yarn test && yarn build"
   },
-  "main": "lib/index.js",
+  "main": "src/index.js",
   "files": [
     "lib",
     "*.md"

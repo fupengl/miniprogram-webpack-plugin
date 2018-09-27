@@ -8,7 +8,6 @@ import MultiEntryPlugin from 'webpack/lib/MultiEntryPlugin';
 import SingleEntryPlugin from 'webpack/lib/SingleEntryPlugin';
 import FunctionModulePlugin from 'webpack/lib/FunctionModulePlugin';
 import NodeSourcePlugin from 'webpack/lib/node/NodeSourcePlugin';
-import { readdir } from 'fs';
 
 const { CommonsChunkPlugin } = optimize;
 
@@ -22,7 +21,7 @@ const deprecated = function deprecated(obj, key, adapter, explain) {
 	}
 	deprecated.warned.add(key);
 	adapter(val);
-	console.warn('[WXAppPlugin]', explain);
+	console.warn('[miniprogram-webpack-plugin]', explain);
 };
 deprecated.warned = new Set();
 
@@ -50,7 +49,7 @@ export const Targets = {
 	}
 };
 
-export default class WXAppPlugin {
+export default class MiniProgramWebpackPlugin {
 	constructor(options = {}) {
 		this.options = defaults(options || {}, {
 			clear: true,
@@ -61,7 +60,6 @@ export default class WXAppPlugin {
 			commonModuleName: 'common.js',
 			enforceTarget: true,
 			assetsChunkName: '__assets_chunk_name__'
-			// base: undefined,
 		});
 
 		deprecated(
@@ -371,7 +369,7 @@ export default class WXAppPlugin {
 	applyCommonsChunk(compiler) {
 		const {
 			options: { commonModuleName },
-			entryResources, entrySubPackages = []
+			entryResources, entrySubPackages
 		} = this;
 
 		const scripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
@@ -444,8 +442,6 @@ export default class WXAppPlugin {
 		// inject chunk entries
 		compilation.chunkTemplate.plugin('render', (core, { name }) => {
 
-			console.log('fileName ->', name);
-
 			if (this.entryResources.indexOf(name) >= 0) {
 
 				const relativePath = relative(dirname(name), `./${commonModuleName}`);
@@ -484,8 +480,6 @@ export default class WXAppPlugin {
 		this.base = this.getBase(compiler);
 		this.entryResources = await this.getEntryResource();
 		this.entrySubPackages = await this.getEntrySubPackages();
-		console.info('entryResources', this.entryResources);
-		console.info('entrySubPackages', this.entrySubPackages);
 		compiler.plugin('compilation', ::this.toModifyTemplate);
 		this.compileScripts(compiler);
 		await this.compileAssets(compiler);

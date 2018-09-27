@@ -1,6 +1,6 @@
 
 import path from 'path';
-import WXAppWebpackPlugin, { Targets } from '../src';
+import MiniProgramWebpackPlugin, { Targets } from '../src';
 
 const ext = process.env.TEST_EXT || 'js';
 
@@ -27,7 +27,7 @@ export default {
 				}
 			},
 			{
-				test: /\.(wxss|wxml|json|png)$/,
+				test: /\.(wxss|wxml|json|png|wxs)$/,
 				include,
 				loader: 'file-loader',
 				options: {
@@ -38,7 +38,7 @@ export default {
 		],
 	},
 	plugins: [
-		new WXAppWebpackPlugin({
+		new MiniProgramWebpackPlugin({
 			extensions: [`.${ext}`, '.js'],
 		}),
 	],
