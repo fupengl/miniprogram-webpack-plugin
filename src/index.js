@@ -1,493 +1,249 @@
-import { remove, readJson, existsSync, stat, readFile } from 'fs-extra';
-import { resolve, dirname, relative, join, parse } from 'path';
-import { optimize, LoaderTargetPlugin, JsonpTemplatePlugin } from 'webpack';
-import { ConcatSource } from 'webpack-sources';
-import globby from 'globby';
-import { defaults, values, uniq } from 'lodash';
-import MultiEntryPlugin from 'webpack/lib/MultiEntryPlugin';
-import SingleEntryPlugin from 'webpack/lib/SingleEntryPlugin';
-import FunctionModulePlugin from 'webpack/lib/FunctionModulePlugin';
-import NodeSourcePlugin from 'webpack/lib/node/NodeSourcePlugin';
-import { readdir } from 'fs';
+const path = require('path');
+const fsExtra = require('fs-extra');
+const globby = require('globby');
+const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin');
+const MultiEntryPlugin = require('webpack/lib/MultiEntryPlugin');
+const LoaderTargetPlugin = require('webpack/lib/LoaderTargetPlugin');
+const FunctionModulePlugin = require('webpack/lib/FunctionModulePlugin');
+const NodeSourcePlugin = require('webpack/lib/node/NodeSourcePlugin');
+const JsonpTemplatePlugin = require('webpack/lib/web/JsonpTemplatePlugin');
+const { ConcatSource } = require('webpack-sources');
 
-const { CommonsChunkPlugin } = optimize;
+const pluginName = 'MiniProgramWebpackPlugin';
+module.exports = class MiniProgramWebpackPlugin {
 
-const deprecated = function deprecated(obj, key, adapter, explain) {
-	if (deprecated.warned.has(key)) {
-		return;
-	}
-	const val = obj[key];
-	if (typeof val === 'undefined') {
-		return;
-	}
-	deprecated.warned.add(key);
-	adapter(val);
-	console.warn('[WXAppPlugin]', explain);
-};
-deprecated.warned = new Set();
-
-const stripExt = path => {
-	const { dir, name } = parse(path);
-	return join(dir, name);
-};
-
-const miniProgramTarget = compiler => {
-	const { options } = compiler;
-	compiler.apply(
-		new JsonpTemplatePlugin(options.output),
-		new FunctionModulePlugin(options.output),
-		new NodeSourcePlugin(options.node),
-		new LoaderTargetPlugin('web')
-	);
-};
-
-export const Targets = {
-	Wechat(compiler) {
-		return miniProgramTarget(compiler);
-	},
-	Alipay(compiler) {
-		return miniProgramTarget(compiler);
-	}
-};
-
-export default class WXAppPlugin {
 	constructor(options = {}) {
-		this.options = defaults(options || {}, {
+		this.options = Object.assign({}, {
 			clear: true,
-			include: [],
-			exclude: [],
-			dot: false, // Include `.dot` files
-			extensions: ['.js'],
-			commonModuleName: 'common.js',
-			enforceTarget: true,
+			extensions: ['.js', '.ts'], // script ext
+			include: [], // include assets file
+			exclude: [], // ignore assets file
 			assetsChunkName: '__assets_chunk_name__'
-			// base: undefined,
-		});
-
-		deprecated(
-			this.options,
-			'scriptExt',
-			val => this.options.extensions.unshift(val),
-			'Option `scriptExt` is deprecated. Please use `extensions` instead'
-		);
-
-		deprecated(
-			this.options,
-			'forceTarge',
-			val => (this.options.enforceTarget = val),
-			'Option `forceTarge` is deprecated. Please use `enforceTarget` instead'
-		);
-
-		this.options.extensions = uniq([...this.options.extensions, '.js']);
-		this.options.include = [].concat(this.options.include);
-		this.options.exclude = [].concat(this.options.exclude);
+		}, options);
 	}
 
 	apply(compiler) {
-		const { clear } = this.options;
-		let isFirst = true;
 
 		this.enforceTarget(compiler);
 
-		compiler.plugin(
-			'run',
-			this.try(async compiler => {
-				await this.run(compiler);
-			})
-		);
+		compiler.hooks.run.tapPromise(pluginName, this.setAppEntries.bind(this));
+		compiler.hooks.watchRun.tapPromise(pluginName, this.setAppEntries.bind(this));
 
-		compiler.plugin(
-			'watch-run',
-			this.try(async compiler => {
-				await this.run(compiler.compiler);
-			})
-		);
+		compiler.hooks.compilation.tap(pluginName, this.compilationHooks.bind(this));
 
-		compiler.plugin(
-			'emit',
-			this.try(async compilation => {
-				if (clear && isFirst) {
-					isFirst = false;
-					await this.clear(compilation);
-				}
+		let firstInit = true;
+		compiler.hooks.emit.tapPromise(pluginName, async compilation => {
+			const { clear } = this.options;
+			if (clear && firstInit) {
+				firstInit = false;
+				await MiniProgramWebpackPlugin.clearOutPut(compilation);
+			}
+			await this.emitAssetsFile(compilation);
+		});
 
-				await this.toEmitTabBarIcons(compilation);
-			})
-		);
-
-		compiler.plugin(
-			'after-emit',
-			this.try(async compilation => {
-				await this.toAddTabBarIconsDependencies(compilation);
-			})
-		);
+		compiler.hooks.done.tap(pluginName, () => {
+			console.log('build success');
+		});
 	}
 
-	try = handler => async (arg, callback) => {
-		try {
-			await handler(arg);
-			callback();
-		} catch (err) {
-			callback(err);
-		}
-	};
+	compilationHooks(compilation) {
+		compilation.chunkTemplate.hooks.render.tap(pluginName, (modules, chunk) => {
+			if (chunk.name === 'app') {
+				const source = new ConcatSource(modules);
+				source.add(`;require('./runtime');require('commons')`);
+				if (modules.source().includes('./commons')) {
+					source.add(`;require('commons')`);
+				}
+				if (modules.source().includes('vendors')) {
+					source.add(`;require('./vendors')`);
+				}
+				return source;
+			}
+			return modules;
+		});
+		// splice empty module
+		compilation.hooks.beforeChunkAssets.tap(pluginName, () => {
+			const assetsChunkIndex = compilation.chunks.findIndex(
+				({ name }) => name === this.options.assetsChunkName
+			);
+			if (assetsChunkIndex > -1) {
+				compilation.chunks.splice(assetsChunkIndex, 1);
+			}
+		});
+	}
 
-	enforceTarget(compiler) {
-		const { enforceTarget } = this.options;
+	async enforceTarget(compiler) {
 		const { options } = compiler;
-
-		if (enforceTarget) {
-			const { target } = options;
-			if (target !== Targets.Wechat && target !== Targets.Alipay) {
-				options.target = Targets.Wechat;
-			}
-			if (!options.node || options.node.global) {
-				options.node = options.node || {};
-				options.node.global = false;
-			}
-		}
-	}
-
-	getBase(compiler) {
-		const { base, extensions } = this.options;
-		if (base) {
-			return resolve(base);
-		}
-
-		const { options: compilerOptions } = compiler;
-		const { context, entry } = compilerOptions;
-
-		const getEntryFromCompiler = () => {
-			if (typeof entry === 'string') {
-				return entry;
-			}
-
-			const extRegExpStr = extensions
-				.map(ext => ext.replace(/\./, '\\.'))
-				.map(ext => `(${ext})`)
-				.join('|');
-
-			const appJSRegExp = new RegExp(`\\bapp(${extRegExpStr})?$`);
-			const findAppJS = arr => arr.find(path => appJSRegExp.test(path));
-
-			if (Array.isArray(entry)) {
-				return findAppJS(entry);
-			}
-			if (typeof entry === 'object') {
-				for (const key in entry) {
-					if (!entry.hasOwnProperty(key)) {
-						continue;
-					}
-
-					const val = entry[key];
-					if (typeof val === 'string') {
-						return val;
-					}
-					if (Array.isArray(val)) {
-						return findAppJS(val);
-					}
-				}
+		options.optimization.runtimeChunk = { name: 'runtime' };
+		options.optimization.splitChunks.cacheGroups = {
+			default: false,
+			//node_modules
+			vendor: {
+				chunks: 'all',
+				test: /[\\/]node_modules[\\/]/,
+				name: 'vendors',
+				minChunks: 0
+			},
+			//其他公用代码
+			common: {
+				chunks: 'all',
+				test: /[\\/]src[\\/]/,
+				minChunks: 2,
+				name: 'commons',
+				minSize: 0
 			}
 		};
+		// set jsonp obj motuned obj
+		options.output.globalObject = 'global';
 
-		const entryFromCompiler = getEntryFromCompiler();
+		if (!options.node || options.node.global) {
+			options.node = options.node || {};
+			options.node.global = false;
+		}
+		// set target to web
+		options.target = compiler => {
+			new JsonpTemplatePlugin(options.output).apply(compiler);
+			new FunctionModulePlugin(options.output).apply(compiler);
+			new NodeSourcePlugin(options.node).apply(compiler);
+			new LoaderTargetPlugin('web').apply(compiler);
+		};
+	}
 
-		if (entryFromCompiler) {
-			return dirname(entryFromCompiler);
+	async setAppEntries(compiler) {
+		const appEntry = compiler.options.entry.app;
+		if (!appEntry) {
+			throw new TypeError('Entry invalid.');
+		}
+		this.basePath = path.resolve(path.dirname(appEntry));
+		this.appEntries = await this.resolveAppEntries();
+		await this.addAssetsEntries(compiler);
+		await this.addScriptEntry(compiler);
+	}
+
+	// resolve tabbar page compoments
+	async resolveAppEntries() {
+		const { tabBar: { list = [] }, pages = [], subPackages = [] } = fsExtra.readJSONSync(path.resolve(this.basePath, 'app.json'));
+
+		let tabBarAssets = new Set();
+		let components = new Set();
+
+		for (const { iconPath, selectedIconPath } of list) {
+			if (iconPath) {
+				tabBarAssets.add(iconPath);
+			}
+			if (selectedIconPath) {
+				tabBarAssets.add(selectedIconPath);
+			}
 		}
 
-		return context;
-	}
-
-	async getTabBarIcons(tabBar) {
-		const tabBarIcons = new Set();
-		const tabBarList = tabBar.list || [];
-		for (const tabBarItem of tabBarList) {
-			if (tabBarItem.iconPath) {
-				tabBarIcons.add(tabBarItem.iconPath);
-			}
-			if (tabBarItem.selectedIconPath) {
-				tabBarIcons.add(tabBarItem.selectedIconPath);
+		// parse subpage
+		for (const subPage of subPackages) {
+			for (const page of (subPage.pages || [])) {
+				pages.push(path.join(subPage.root, page));
 			}
 		}
 
-		this.tabBarIcons = tabBarIcons;
-	}
-
-	async toEmitTabBarIcons(compilation) {
-		const emitIcons = [];
-		this.tabBarIcons.forEach(iconPath => {
-			const iconSrc = resolve(this.base, iconPath);
-			const toEmitIcon = async () => {
-				const iconStat = await stat(iconSrc);
-				const iconSource = await readFile(iconSrc);
-				compilation.assets[iconPath] = {
-					size: () => iconStat.size,
-					source: () => iconSource
-				};
-			};
-			emitIcons.push(toEmitIcon());
-		});
-		await Promise.all(emitIcons);
-	}
-
-	toAddTabBarIconsDependencies(compilation) {
-		const { fileDependencies } = compilation;
-		this.tabBarIcons.forEach(iconPath => {
-			if (!~fileDependencies.indexOf(iconPath)) {
-				fileDependencies.push(iconPath);
-			}
-		});
-	}
-
-	async getEntryResource() {
-		const {
-			options: { exclude, dot },
-			base
-		} = this;
-		const appJSONFile = resolve(base, 'app.json');
-		const { pages = [], tabBar = {} } = await readJson(
-			appJSONFile
-		);
-
-		this.getTabBarIcons(tabBar);
-
-		const components = new Set();
+		// resolve page components
 		for (const page of pages) {
-			await this.getComponents(components, resolve(base, page));
+			await this.getComponents(components, path.resolve(this.basePath, page));
 		}
 
-		return [
-			'app',
-			...pages,
-			...components
-		];
-	}
+		components = Array.from(components) || [];
+		tabBarAssets = Array.from(tabBarAssets) || [];
 
-	async getEntrySubPackages() {
-		const {
-			options: { exclude, dot },
-			base
-		} = this;
-		const appJSONFile = resolve(base, 'app.json');
-		const { subPackages = [] } = await readJson(
-			appJSONFile
-		);
-
-		const entrySubPackages = [];
-
-		for (const subPackage of subPackages) {
-
-			const { root, pages = [] } = subPackage;
-			const components = new Set();
-
-			for (const page of pages) {
-				await this.getComponents(components, resolve(base, join(root, page)));
+		const ret = ['app', ...pages, ...components];
+		Object.defineProperties(ret, {
+			pages: {
+				get: () => pages
+			},
+			components: {
+				get: () => components
+			},
+			tabBarAssets: {
+				get: () => tabBarAssets
 			}
-
-			entrySubPackages.push([
-				...pages.map(page => join(root, page)),
-				...components
-			]);
-
-		}
-
-		return entrySubPackages;
+		});
+		return ret;
 	}
 
+	// add script entry
+	async addScriptEntry(compiler) {
+		compiler.hooks.make.tap(pluginName, compilation => {
+			this.appEntries
+				.filter(resource => resource !== 'app')
+				.forEach(resource => {
+					const fullPath = this.getFullScriptPath(resource);
+					const dep = SingleEntryPlugin.createDependency(fullPath, resource);
+					compilation.addEntry(this.base, dep, resource, () => { });
+				});
+		});
+	}
+
+	// add assets entry
+	async addAssetsEntries(compiler) {
+		const { include, exclude, extensions, assetsChunkName } = this.options;
+		const patterns = this.appEntries.map(resource => `${resource}.*`).concat(include);
+		const entries = await globby(patterns, {
+			cwd: this.basePath,
+			nodir: true,
+			realpath: true,
+			ignore: [...extensions.map(ext => `**/*${ext}`), ...exclude],
+			dot: false
+		});
+		entries.push(...this.appEntries.tabBarAssets);
+		this.assetsEntry = entries;
+		new MultiEntryPlugin(this.basePath, entries, assetsChunkName).apply(compiler);
+	}
+
+	// parse components
 	async getComponents(components, instance) {
-		const { usingComponents = {} } =
-			(await readJson(`${instance}.json`).catch(
-				err => err && err.code !== 'ENOENT' && console.error(err)
-			)) || {};
-		const componentBase = parse(instance).dir;
-		for (const relativeComponent of values(usingComponents)) {
-			if (relativeComponent.indexOf('plugin://') === 0) {
-				continue;
-			}
-			const component = resolve(componentBase, relativeComponent);
-			if (!components.has(component)) {
-				components.add(relative(this.base, component));
+		const {
+			usingComponents = {}
+		} = fsExtra.readJSONSync(`${instance}.json`);
+		const componentBase = path.parse(instance).dir;
+		for (const c of Object.values(usingComponents)) {
+			const component = path.resolve(componentBase, c);
+			if (!components.has(component) && c.indexOf('plugin://') !== 0) {
+				components.add(path.relative(this.basePath, component));
 				await this.getComponents(components, component);
 			}
 		}
 	}
 
-	getFullScriptPath(path) {
+	async emitAssetsFile(compilation) {
+		const emitIcons = [];
+		this.assetsEntry.forEach(entry => {
+			const iconSrc = path.resolve(this.basePath, entry);
+			const toTmit = async () => {
+				const iconStat = await fsExtra.stat(iconSrc);
+				const iconSource = await fsExtra.readFile(iconSrc);
+				compilation.assets[entry] = {
+					size: () => iconStat.size,
+					source: () => iconSource
+				};
+			};
+			emitIcons.push(toTmit());
+		});
+		await Promise.all(emitIcons);
+	}
+
+	// script full path
+	getFullScriptPath(script) {
 		const {
-			base,
+			basePath,
 			options: { extensions }
 		} = this;
 		for (const ext of extensions) {
-			const fullPath = resolve(base, path + ext);
-			if (existsSync(fullPath)) {
+			const fullPath = path.resolve(basePath, script + ext);
+			if (fsExtra.existsSync(fullPath)) {
 				return fullPath;
 			}
 		}
 	}
 
-	async clear(compilation) {
+
+	static async clearOutPut(compilation) {
 		const { path } = compilation.options.output;
-		await remove(path);
+		await fsExtra.remove(path);
 	}
-
-	addEntries(compiler, entries, chunkName) {
-		compiler.apply(new MultiEntryPlugin(this.base, entries, chunkName));
-	}
-
-	async compileAssets(compiler) {
-		const {
-			options: { include, exclude, dot, assetsChunkName, extensions },
-			entryResources,
-			entrySubPackages
-		} = this;
-
-		compiler.plugin('compilation', compilation => {
-			compilation.plugin('before-chunk-assets', () => {
-				const assetsChunkIndex = compilation.chunks.findIndex(
-					({ name }) => name === assetsChunkName
-				);
-				if (assetsChunkIndex > -1) {
-					compilation.chunks.splice(assetsChunkIndex, 1);
-				}
-			});
-		});
-
-		const patterns = entryResources.concat(...entrySubPackages)
-			.map(resource => `${resource}.*`)
-			.concat(include);
-
-		const entries = await globby(patterns, {
-			cwd: this.base,
-			nodir: true,
-			realpath: true,
-			ignore: [...extensions.map(ext => `**/*${ext}`), ...exclude],
-			dot
-		});
-
-		this.addEntries(compiler, entries, assetsChunkName);
-	}
-
-	applyCommonsChunk(compiler) {
-		const {
-			options: { commonModuleName },
-			entryResources, entrySubPackages = []
-		} = this;
-
-		const scripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
-
-		entrySubPackages.forEach(item => {
-			if (item.length) {
-				const temp = item[0].split('/');
-				const subpackageName = temp.slice(0, temp.length - 1).join('/');
-				compiler.apply(
-					new CommonsChunkPlugin({
-						name: `${subpackageName}/${commonModuleName}`,
-						minChunks: 2,
-						names: item
-					})
-				);
-			}
-		});
-
-		compiler.apply(
-			new CommonsChunkPlugin({
-				name: commonModuleName,
-				minChunks: function (module, count) {
-					return (
-						module.resource &&
-						/\.js$/.test(module.resource) &&
-						module.resource.indexOf('node_modules') >= 0 && scripts.includes(module.resource)
-					);
-				}
-			})
-		);
-
-		compiler.apply(
-			new CommonsChunkPlugin({
-				name: 'manifest',
-				chunks: [commonModuleName]
-			})
-		);
-
-	}
-
-	addScriptEntry(compiler, entry, name) {
-		compiler.plugin('make', (compilation, callback) => {
-			const dep = SingleEntryPlugin.createDependency(entry, name);
-			compilation.addEntry(this.base, dep, name, callback);
-		});
-	}
-
-	compileScripts(compiler) {
-		this.applyCommonsChunk(compiler);
-		this.entryResources
-			.filter(resource => resource !== 'app')
-			.forEach(resource => {
-				const fullPath = this.getFullScriptPath(resource);
-				this.addScriptEntry(compiler, fullPath, resource);
-			});
-		this.entrySubPackages.forEach(item => {
-			item.forEach(resource => {
-				const fullPath = this.getFullScriptPath(resource);
-				this.addScriptEntry(compiler, fullPath, resource);
-			});
-		});
-	}
-
-	toModifyTemplate(compilation) {
-		const { commonModuleName } = this.options;
-		const { target } = compilation.options;
-		const commonChunkName = stripExt(commonModuleName);
-		const globalVar = target.name === 'Alipay' ? 'my' : 'wx';
-
-		// inject chunk entries
-		compilation.chunkTemplate.plugin('render', (core, { name }) => {
-
-			console.log('fileName ->', name);
-
-			if (this.entryResources.indexOf(name) >= 0) {
-
-				const relativePath = relative(dirname(name), `./${commonModuleName}`);
-				const posixPath = relativePath.replace(/\\/g, '/');
-				const source = core.source();
-
-				// eslint-disable-next-line max-len
-				const injectContent = `; function webpackJsonp() { require("./${posixPath}"); ${globalVar}.webpackJsonp.apply(null, arguments); }`;
-
-				if (source.indexOf(injectContent) < 0) {
-					const concatSource = new ConcatSource(core);
-					concatSource.add(injectContent);
-					return concatSource;
-				}
-			}
-			return core;
-		});
-
-		// replace `window` to `global` in common chunk
-		compilation.mainTemplate.plugin('bootstrap', (source, chunk) => {
-			const windowRegExp = new RegExp('window', 'g');
-			if (chunk.name === commonChunkName) {
-				return source.replace(windowRegExp, globalVar);
-			}
-			return source;
-		});
-
-		// override `require.ensure()`
-		compilation.mainTemplate.plugin(
-			'require-ensure',
-			() => 'throw new Error("Not chunk loading available");'
-		);
-	}
-
-	async run(compiler) {
-		this.base = this.getBase(compiler);
-		this.entryResources = await this.getEntryResource();
-		this.entrySubPackages = await this.getEntrySubPackages();
-		console.info('entryResources', this.entryResources);
-		console.info('entrySubPackages', this.entrySubPackages);
-		compiler.plugin('compilation', ::this.toModifyTemplate);
-		this.compileScripts(compiler);
-		await this.compileAssets(compiler);
-	}
-}
+};

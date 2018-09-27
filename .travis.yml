@@ -5,10 +5,14 @@ services:
 
 language: node_js
 
+os:
+  - osx
+  - linux
+  - windows
+
 node_js:
   - 8
-  - 6
-  - 4
 
-notifications:
-  email: false
+cache:
+  directories:
+  - "node_modules"
