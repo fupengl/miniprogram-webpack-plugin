@@ -27,7 +27,8 @@ export default {
 				}
 			},
 			{
-				test: /\.(wxss|wxml|json|png|wxs)$/,
+				test: /\.(json|wxml|wxs|wxss|png)$/,
+				type: 'javascript/auto',
 				include,
 				loader: 'file-loader',
 				options: {
@@ -37,9 +38,33 @@ export default {
 			},
 		],
 	},
+	optimization: {
+		splitChunks: {
+			cacheGroups: {
+				subPackagesproduct: {
+					name: 'subPackages/product/common',
+					test(chunks) {
+						return chunks.context.includes('/subPackages/product/') || chunks.context.includes('/node_modules/');
+					},
+					chunks: 'all'
+				},
+				subPackagesproduct1: {
+					name: 'subPackages/product1/common',
+					test(chunks) {
+						return chunks.context.includes('/subPackages/product1/') || chunks.context.includes('/node_modules/');
+					},
+					chunks: 'all'
+				},
+				// common:	{
+				// 	name: 'common',
+				// 	test(chunks) {
+				// 		return chunks.context.includes('/pages/') || chunks.context.includes('/node_modules/') || chunks.context.includes('/components/');
+				// 	},
+			}},
+	},
 	plugins: [
 		new MiniProgramWebpackPlugin({
-			extensions: [`.${ext}`, '.js'],
+			extensions: [`.${ext}`, '.ts'],
 		}),
 	],
 	devtool: 'source-map',

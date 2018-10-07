@@ -1,6 +1,6 @@
 import { remove, readJson, existsSync, stat, readFile } from 'fs-extra';
 import { resolve, dirname, relative, join, parse } from 'path';
-import { optimize, LoaderTargetPlugin, JsonpTemplatePlugin } from 'webpack';
+import { optimize, web, LoaderTargetPlugin } from 'webpack';
 import { ConcatSource } from 'webpack-sources';
 import globby from 'globby';
 import { defaults, values, uniq } from 'lodash';
@@ -9,7 +9,8 @@ import SingleEntryPlugin from 'webpack/lib/SingleEntryPlugin';
 import FunctionModulePlugin from 'webpack/lib/FunctionModulePlugin';
 import NodeSourcePlugin from 'webpack/lib/node/NodeSourcePlugin';
 
-const { CommonsChunkPlugin } = optimize;
+const { SplitChunksPlugin } = optimize;
+const { JsonpTemplatePlugin } = web;
 
 const deprecated = function deprecated(obj, key, adapter, explain) {
 	if (deprecated.warned.has(key)) {
@@ -57,25 +58,10 @@ export default class MiniProgramWebpackPlugin {
 			exclude: [],
 			dot: false, // Include `.dot` files
 			extensions: ['.js'],
-			commonModuleName: 'common.js',
+			commonModuleName: 'common',
 			enforceTarget: true,
-			assetsChunkName: '__assets_chunk_name__'
+			assetsChunkName: '__assets_chunk__'
 		});
-
-		deprecated(
-			this.options,
-			'scriptExt',
-			val => this.options.extensions.unshift(val),
-			'Option `scriptExt` is deprecated. Please use `extensions` instead'
-		);
-
-		deprecated(
-			this.options,
-			'forceTarge',
-			val => (this.options.enforceTarget = val),
-			'Option `forceTarge` is deprecated. Please use `enforceTarget` instead'
-		);
-
 		this.options.extensions = uniq([...this.options.extensions, '.js']);
 		this.options.include = [].concat(this.options.include);
 		this.options.exclude = [].concat(this.options.exclude);
@@ -232,8 +218,8 @@ export default class MiniProgramWebpackPlugin {
 	toAddTabBarIconsDependencies(compilation) {
 		const { fileDependencies } = compilation;
 		this.tabBarIcons.forEach(iconPath => {
-			if (!~fileDependencies.indexOf(iconPath)) {
-				fileDependencies.push(iconPath);
+			if (!~fileDependencies.has(iconPath)) {
+				fileDependencies.add(iconPath);
 			}
 		});
 	}
@@ -372,41 +358,25 @@ export default class MiniProgramWebpackPlugin {
 			entryResources, entrySubPackages
 		} = this;
 
-		const scripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
+		const cacheGroups = {};
 
 		entrySubPackages.forEach(item => {
 			if (item.length) {
 				const temp = item[0].split('/');
 				const subpackageName = temp.slice(0, temp.length - 1).join('/');
-				compiler.apply(
-					new CommonsChunkPlugin({
-						name: `${subpackageName}/${commonModuleName}`,
-						minChunks: 2,
-						names: item
-					})
-				);
+				cacheGroups[subpackageName.replace(/\//g, '')] = {
+					name: `${subpackageName}/${commonModuleName}`,
+					test: item
+				};
 			}
 		});
 
-		compiler.apply(
-			new CommonsChunkPlugin({
-				name: commonModuleName,
-				minChunks: function (module, count) {
-					return (
-						module.resource &&
-						/\.js$/.test(module.resource) &&
-						module.resource.indexOf('node_modules') >= 0 && scripts.includes(module.resource)
-					);
-				}
-			})
-		);
+		cacheGroups[commonModuleName] = {
+			test: entryResources,
+			name: commonModuleName,
+		};
 
-		compiler.apply(
-			new CommonsChunkPlugin({
-				name: 'manifest',
-				chunks: [commonModuleName]
-			})
-		);
+		compiler.options.optimization.splitChunks.cacheGroups = cacheGroups;
 
 	}
 
@@ -442,21 +412,20 @@ export default class MiniProgramWebpackPlugin {
 		// inject chunk entries
 		compilation.chunkTemplate.plugin('render', (core, { name }) => {
 
-			if (this.entryResources.indexOf(name) >= 0) {
-
-				const relativePath = relative(dirname(name), `./${commonModuleName}`);
-				const posixPath = relativePath.replace(/\\/g, '/');
-				const source = core.source();
-
-				// eslint-disable-next-line max-len
-				const injectContent = `; function webpackJsonp() { require("./${posixPath}"); ${globalVar}.webpackJsonp.apply(null, arguments); }`;
-
-				if (source.indexOf(injectContent) < 0) {
-					const concatSource = new ConcatSource(core);
-					concatSource.add(injectContent);
-					return concatSource;
-				}
-			}
+			// 	if (this.entryResources.indexOf(name) >= 0) {
+			// 		const relativePath = relative(dirname(name), `./${commonModuleName}`);
+			// 		const posixPath = relativePath.replace(/\\/g, '/');
+			// 		const source = core.source();
+			//
+			// 		// eslint-disable-next-line max-len
+			// 		const injectContent = `; function webpackJsonp() { require("./${posixPath}"); ${globalVar}.webpackJsonp.apply(null, arguments); }`;
+			//
+			// 		if (source.indexOf(injectContent) < 0) {
+			// 			const concatSource = new ConcatSource(core);
+			// 			concatSource.add(injectContent);
+			// 			return concatSource;
+			// 		}
+			// 	}
 			return core;
 		});
 

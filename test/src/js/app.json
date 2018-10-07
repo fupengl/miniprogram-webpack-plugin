@@ -23,6 +23,13 @@
         "productDetail",
         "productList"
       ]
+    },
+    {
+      "root": "subPackages/product1",
+      "pages": [
+        "productDetail",
+        "productList"
+      ]
     }
   ],
   "window":{
