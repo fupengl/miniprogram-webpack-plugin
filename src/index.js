@@ -8,8 +8,8 @@ import MultiEntryPlugin from 'webpack/lib/MultiEntryPlugin';
 import SingleEntryPlugin from 'webpack/lib/SingleEntryPlugin';
 import FunctionModulePlugin from 'webpack/lib/FunctionModulePlugin';
 import NodeSourcePlugin from 'webpack/lib/node/NodeSourcePlugin';
+import SplitChunksPlugin from 'webpack/lib/optimize/SplitChunksPlugin';
 
-const { SplitChunksPlugin } = optimize;
 const { JsonpTemplatePlugin } = web;
 
 const deprecated = function deprecated(obj, key, adapter, explain) {
@@ -33,12 +33,11 @@ const stripExt = path => {
 
 const miniProgramTarget = compiler => {
 	const { options } = compiler;
-	compiler.apply(
-		new JsonpTemplatePlugin(options.output),
-		new FunctionModulePlugin(options.output),
-		new NodeSourcePlugin(options.node),
-		new LoaderTargetPlugin('web')
-	);
+	(new JsonpTemplatePlugin(options.output),
+	new FunctionModulePlugin(options.output),
+	new NodeSourcePlugin(options.node),
+	new LoaderTargetPlugin('web')
+	).apply(compiler);
 };
 
 export const Targets = {
@@ -73,46 +72,34 @@ export default class MiniProgramWebpackPlugin {
 
 		this.enforceTarget(compiler);
 
-		compiler.plugin(
-			'run',
-			this.try(async compiler => {
-				await this.run(compiler);
-			})
-		);
+		compiler.hooks.run.tapAsync('MiniProgramWebpackPlugin', this.try(async compiler => {
+			await this.run(compiler);
+		}));
 
-		compiler.plugin(
-			'watch-run',
-			this.try(async compiler => {
-				await this.run(compiler.compiler);
-			})
-		);
+		compiler.hooks.watchRun.tapAsync('MiniProgramWebpackPlugin', this.try(async compiler => {
+			await this.run(compiler.compiler);
+		}));
 
-		compiler.plugin(
-			'emit',
-			this.try(async compilation => {
-				if (clear && isFirst) {
-					isFirst = false;
-					await this.clear(compilation);
-				}
+		compiler.hooks.emit.tapAsync('MiniProgramWebpackPlugin', this.try(async compilation => {
+			if (clear && isFirst) {
+				isFirst = false;
+				await this.clear(compilation);
+			}
+			await this.toEmitTabBarIcons(compilation);
+		}));
 
-				await this.toEmitTabBarIcons(compilation);
-			})
-		);
+		compiler.hooks.afterEmit.tapAsync('MiniProgramWebpackPlugin', this.try(async compilation => {
+			await this.toAddTabBarIconsDependencies(compilation);
+		}));
 
-		compiler.plugin(
-			'after-emit',
-			this.try(async compilation => {
-				await this.toAddTabBarIconsDependencies(compilation);
-			})
-		);
 	}
 
 	try = handler => async (arg, callback) => {
 		try {
 			await handler(arg);
-			callback();
+			callback && callback();
 		} catch (err) {
-			callback(err);
+			callback && callback(err);
 		}
 	};
 
@@ -316,7 +303,7 @@ export default class MiniProgramWebpackPlugin {
 	}
 
 	addEntries(compiler, entries, chunkName) {
-		compiler.apply(new MultiEntryPlugin(this.base, entries, chunkName));
+		(new MultiEntryPlugin(this.base, entries, chunkName)).apply(compiler);
 	}
 
 	async compileAssets(compiler) {
@@ -326,8 +313,8 @@ export default class MiniProgramWebpackPlugin {
 			entrySubPackages
 		} = this;
 
-		compiler.plugin('compilation', compilation => {
-			compilation.plugin('before-chunk-assets', () => {
+		compiler.hooks.compilation.tap('MiniProgramWebpackPlugin', compilation => {
+			compilation.hooks.beforeChunkAssets.tap('MiniProgramWebpackPlugin', () => {
 				const assetsChunkIndex = compilation.chunks.findIndex(
 					({ name }) => name === assetsChunkName
 				);
@@ -376,12 +363,35 @@ export default class MiniProgramWebpackPlugin {
 			name: commonModuleName,
 		};
 
-		compiler.options.optimization.splitChunks.cacheGroups = cacheGroups;
+		(new SplitChunksPlugin({
+			chunks: 'all',
+			cacheGroups: {
+				// 提取 node_modules 中代码
+				vendors: {
+					test: /[\\/]node_modules[\\/]/,
+					name: 'vendors',
+					chunks: 'all'
+				},
+				commons: {
+					// async 设置提取异步代码中的公用代码
+					chunks: 'async',
+					name: 'commons-async',
+					/**
+					 * minSize 默认为 30000
+					 * 想要使代码拆分真的按照我们的设置来
+					 * 需要减小 minSize
+					 */
+					minSize: 0,
+					// 至少为两个 chunks 的公用代码
+					minChunks: 2
+				}
+			}
+		})).apply(compiler);
 
 	}
 
 	addScriptEntry(compiler, entry, name) {
-		compiler.plugin('make', (compilation, callback) => {
+		compiler.hooks.make.tapAsync('MiniProgramWebpackPlugin', (compilation, callback) => {
 			const dep = SingleEntryPlugin.createDependency(entry, name);
 			compilation.addEntry(this.base, dep, name, callback);
 		});
@@ -409,28 +419,29 @@ export default class MiniProgramWebpackPlugin {
 		const commonChunkName = stripExt(commonModuleName);
 		const globalVar = target.name === 'Alipay' ? 'my' : 'wx';
 
-		// inject chunk entries
-		compilation.chunkTemplate.plugin('render', (core, { name }) => {
 
-			// 	if (this.entryResources.indexOf(name) >= 0) {
-			// 		const relativePath = relative(dirname(name), `./${commonModuleName}`);
-			// 		const posixPath = relativePath.replace(/\\/g, '/');
-			// 		const source = core.source();
-			//
-			// 		// eslint-disable-next-line max-len
-			// 		const injectContent = `; function webpackJsonp() { require("./${posixPath}"); ${globalVar}.webpackJsonp.apply(null, arguments); }`;
-			//
-			// 		if (source.indexOf(injectContent) < 0) {
-			// 			const concatSource = new ConcatSource(core);
-			// 			concatSource.add(injectContent);
-			// 			return concatSource;
-			// 		}
-			// 	}
+		// inject chunk entries
+		compilation.chunkTemplate.hooks.render.tap('MiniProgramWebpackPlugin', (core, { name }) => {
+
+			if (this.entryResources.indexOf(name) >= 0) {
+				const relativePath = relative(dirname(name), `./${commonModuleName}`);
+				const posixPath = relativePath.replace(/\\/g, '/');
+				const source = core.source();
+
+				// eslint-disable-next-line max-len
+				const injectContent = `; function webpackJsonp() { require("./${posixPath}"); ${globalVar}.webpackJsonp.apply(null, arguments); }`;
+
+				if (source.indexOf(injectContent) < 0) {
+					const concatSource = new ConcatSource(core);
+					concatSource.add(injectContent);
+					return concatSource;
+				}
+			}
 			return core;
 		});
 
 		// replace `window` to `global` in common chunk
-		compilation.mainTemplate.plugin('bootstrap', (source, chunk) => {
+		compilation.mainTemplate.hooks.bootstrap.tap('MiniProgramWebpackPlugin', (source, chunk) => {
 			const windowRegExp = new RegExp('window', 'g');
 			if (chunk.name === commonChunkName) {
 				return source.replace(windowRegExp, globalVar);
@@ -439,17 +450,15 @@ export default class MiniProgramWebpackPlugin {
 		});
 
 		// override `require.ensure()`
-		compilation.mainTemplate.plugin(
-			'require-ensure',
-			() => 'throw new Error("Not chunk loading available");'
-		);
+		compilation.mainTemplate.hooks.requireEnsure.tap('MiniProgramWebpackPlugin', () => 'throw new Error("Not chunk loading available");');
 	}
 
 	async run(compiler) {
 		this.base = this.getBase(compiler);
 		this.entryResources = await this.getEntryResource();
 		this.entrySubPackages = await this.getEntrySubPackages();
-		compiler.plugin('compilation', ::this.toModifyTemplate);
+		compiler.hooks.compilation.tap('MiniProgramWebpackPlugin', ::this.toModifyTemplate);
+		// compiler.plugin('compilation', ::this.toModifyTemplate);
 		this.compileScripts(compiler);
 		await this.compileAssets(compiler);
 	}
