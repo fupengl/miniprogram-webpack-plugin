@@ -1,16 +1,16 @@
-import { remove, readJson, existsSync, stat, readFile } from 'fs-extra';
-import { resolve, dirname, relative, join, parse } from 'path';
-import { optimize, web, LoaderTargetPlugin } from 'webpack';
+import { existsSync, readFile, readJson, remove, stat } from 'fs-extra';
+import { dirname, join, parse, relative, resolve } from 'path';
+import { LoaderTargetPlugin, optimize, web } from 'webpack';
 import { ConcatSource } from 'webpack-sources';
 import globby from 'globby';
-import { defaults, values, uniq } from 'lodash';
+import { defaults, uniq, values } from 'lodash';
 import MultiEntryPlugin from 'webpack/lib/MultiEntryPlugin';
 import SingleEntryPlugin from 'webpack/lib/SingleEntryPlugin';
 import FunctionModulePlugin from 'webpack/lib/FunctionModulePlugin';
 import NodeSourcePlugin from 'webpack/lib/node/NodeSourcePlugin';
-import SplitChunksPlugin from 'webpack/lib/optimize/SplitChunksPlugin';
 
 const { JsonpTemplatePlugin } = web;
+const { SplitChunksPlugin } = optimize;
 
 const deprecated = function deprecated(obj, key, adapter, explain) {
 	if (deprecated.warned.has(key)) {
@@ -36,8 +36,7 @@ const miniProgramTarget = compiler => {
 	(new JsonpTemplatePlugin(options.output),
 	new FunctionModulePlugin(options.output),
 	new NodeSourcePlugin(options.node),
-	new LoaderTargetPlugin('web')
-	).apply(compiler);
+	new LoaderTargetPlugin('web')).apply(compiler);
 };
 
 export const Targets = {
@@ -268,9 +267,9 @@ export default class MiniProgramWebpackPlugin {
 
 	async getComponents(components, instance) {
 		const { usingComponents = {} } =
-			(await readJson(`${instance}.json`).catch(
-				err => err && err.code !== 'ENOENT' && console.error(err)
-			)) || {};
+		(await readJson(`${instance}.json`).catch(
+			err => err && err.code !== 'ENOENT' && console.error(err)
+		)) || {};
 		const componentBase = parse(instance).dir;
 		for (const relativeComponent of values(usingComponents)) {
 			if (relativeComponent.indexOf('plugin://') === 0) {
@@ -366,23 +365,10 @@ export default class MiniProgramWebpackPlugin {
 		(new SplitChunksPlugin({
 			chunks: 'all',
 			cacheGroups: {
-				// 提取 node_modules 中代码
-				vendors: {
-					test: /[\\/]node_modules[\\/]/,
-					name: 'vendors',
-					chunks: 'all'
-				},
 				commons: {
-					// async 设置提取异步代码中的公用代码
 					chunks: 'async',
 					name: 'commons-async',
-					/**
-					 * minSize 默认为 30000
-					 * 想要使代码拆分真的按照我们的设置来
-					 * 需要减小 minSize
-					 */
 					minSize: 0,
-					// 至少为两个 chunks 的公用代码
 					minChunks: 2
 				}
 			}
@@ -399,18 +385,12 @@ export default class MiniProgramWebpackPlugin {
 
 	compileScripts(compiler) {
 		this.applyCommonsChunk(compiler);
-		this.entryResources
+		this.entryResources.concat(...this.entrySubPackages)
 			.filter(resource => resource !== 'app')
 			.forEach(resource => {
 				const fullPath = this.getFullScriptPath(resource);
 				this.addScriptEntry(compiler, fullPath, resource);
 			});
-		this.entrySubPackages.forEach(item => {
-			item.forEach(resource => {
-				const fullPath = this.getFullScriptPath(resource);
-				this.addScriptEntry(compiler, fullPath, resource);
-			});
-		});
 	}
 
 	toModifyTemplate(compilation) {
@@ -458,7 +438,6 @@ export default class MiniProgramWebpackPlugin {
 		this.entryResources = await this.getEntryResource();
 		this.entrySubPackages = await this.getEntrySubPackages();
 		compiler.hooks.compilation.tap('MiniProgramWebpackPlugin', ::this.toModifyTemplate);
-		// compiler.plugin('compilation', ::this.toModifyTemplate);
 		this.compileScripts(compiler);
 		await this.compileAssets(compiler);
 	}
