@@ -10,7 +10,6 @@ import SingleEntryPlugin from 'webpack/lib/SingleEntryPlugin';
 import FunctionModulePlugin from 'webpack/lib/FunctionModulePlugin';
 import NodeSourcePlugin from 'webpack/lib/node/NodeSourcePlugin';
 import JsonpTemplatePlugin from 'webpack/lib/web/JsonpTemplatePlugin';
-import webpack from 'webpack';
 
 const deprecated = function deprecated(obj, key, adapter, explain) {
 	if (deprecated.warned.has(key)) {
@@ -216,7 +215,7 @@ export default class MiniProgramWebpackPlugin {
 			base
 		} = this;
 		const appJSONFile = resolve(base, 'app.json');
-		const { pages = [], tabBar = {} } = await readJson(
+		const { pages = [], tabBar = {}, subPackages = [] } = await readJson(
 			appJSONFile
 		);
 
@@ -227,42 +226,26 @@ export default class MiniProgramWebpackPlugin {
 			await this.getComponents(components, resolve(base, page));
 		}
 
-		return [
+		const entryResources = [
 			'app',
 			...pages,
 			...components
 		];
-	}
-
-	async getEntrySubPackages() {
-		const {
-			options: { exclude, dot },
-			base
-		} = this;
-		const appJSONFile = resolve(base, 'app.json');
-		const { subPackages = [] } = await readJson(
-			appJSONFile
-		);
 
 		const entrySubPackages = [];
-
 		for (const subPackage of subPackages) {
-
 			const { root, pages = [] } = subPackage;
 			const components = new Set();
-
 			for (const page of pages) {
 				await this.getComponents(components, resolve(base, join(root, page)));
 			}
-
 			entrySubPackages.push([
 				...pages.map(page => join(root, page)),
 				...components
 			]);
-
 		}
 
-		return entrySubPackages;
+		return { entryResources, entrySubPackages };
 	}
 
 	async getComponents(components, instance) {
@@ -339,55 +322,45 @@ export default class MiniProgramWebpackPlugin {
 	}
 
 	applyCommonsChunk(compiler) {
-		const { options, entryResources, entrySubPackages } = this;
-		const { commonModuleName } = options;
-
+		const { options: { commonModuleName }, entryResources, entrySubPackages } = this;
+		const entryScripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
 		const cacheGroups = {};
-
 		entrySubPackages.forEach(item => {
 			if (item.length) {
 				const temp = item[0].split('/');
 				const subpackageName = temp.slice(0, temp.length - 1).join('/');
+				const subScripts = item.map(::this.getFullScriptPath).filter(v => v);
+
 				cacheGroups[subpackageName.replace(/\//g, '')] = {
-					name: `${subpackageName}/${commonModuleName}`,
-					test: item
+					name: stripExt(`${subpackageName}/${commonModuleName}`),
+					chunks: 'initial',
+					test({ resource }) {
+						return resource && subScripts.includes(resource);
+					}
 				};
 			}
 		});
-
-		cacheGroups[commonModuleName] = {
-			test: entryResources,
-			name: commonModuleName,
-		};
-
 		new optimize.SplitChunksPlugin({
-			cacheGroups: {
-				default: {
-					minChunks: 2,
-					priority: -20,
-					reuseExistingChunk: true,
-				},
+			cacheGroups: Object.assign({}, cacheGroups, {
 				//打包重複出現的程式碼
 				vendor: {
 					chunks: 'initial',
-					minChunks: 2,
-					maxInitialRequests: 5, // The default limit is too small to showcase the effect
-					minSize: 0, // This is example is too small to create commons chunks
-					name: 'vendor'
+					name: 'vendor',
+					test({ resource }) {
+						return resource && entryScripts.includes(resource);
+					}
 				},
 				//打包第三方類庫
 				commons: {
-					name: 'commons',
+					name: stripExt(commonModuleName),
 					chunks: 'initial',
 					minChunks: Infinity
 				}
-			}
+			})
 		}).apply(compiler);
-
 		new optimize.RuntimeChunkPlugin({
 			name: 'manifest'
 		}).apply(compiler);
-
 	}
 
 	addScriptEntry(compiler, entry, name) {
@@ -449,8 +422,9 @@ export default class MiniProgramWebpackPlugin {
 
 	async run(compiler) {
 		this.base = this.getBase(compiler);
-		this.entryResources = await this.getEntryResource();
-		this.entrySubPackages = await this.getEntrySubPackages();
+		const { entryResources, entrySubPackages } = await this.getEntryResource();
+		this.entryResources = entryResources;
+		this.entrySubPackages = entrySubPackages;
 		compiler.hooks.compilation.tap('MiniProgramWebpackPlugin', ::this.toModifyTemplate);
 		this.compileScripts(compiler);
 		await this.compileAssets(compiler);
