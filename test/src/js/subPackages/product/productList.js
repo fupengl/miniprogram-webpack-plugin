@@ -3,6 +3,7 @@
 
 // const delay = (t = 0) => new Promise((resolve) => setTimeout(resolve, t));
 import Product from './product.service';
+import { formatTime } from '../../utils/util';
 
 console.log(Product, '!!!!!!!');
 const productService = new Product();
@@ -32,6 +33,8 @@ Page({
 		this.setData({
 			productName: productService.getProductName()
 		});
+
+		console.log(formatTime(new Date()));
 
 		//调用应用实例的方法获取全局数据
 		app.getUserInfo((userInfo) => {

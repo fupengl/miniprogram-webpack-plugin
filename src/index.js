@@ -323,7 +323,9 @@ export default class MiniProgramWebpackPlugin {
 
 	applyCommonsChunk(compiler) {
 		const { options: { commonModuleName }, entryResources, entrySubPackages } = this;
+
 		const entryScripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
+
 		const cacheGroups = {};
 		entrySubPackages.forEach(item => {
 			if (item.length) {
@@ -334,33 +336,37 @@ export default class MiniProgramWebpackPlugin {
 				cacheGroups[subpackageName.replace(/\//g, '')] = {
 					name: stripExt(`${subpackageName}/${commonModuleName}`),
 					chunks: 'initial',
+					enforce: true,
+					minChunks: 1,
 					test({ resource }) {
 						return resource && subScripts.includes(resource);
 					}
 				};
 			}
 		});
+
 		new optimize.SplitChunksPlugin({
+			chunks: 'all',
 			cacheGroups: Object.assign({}, cacheGroups, {
-				//打包重複出現的程式碼
-				vendor: {
+				default: false,
+				[`${commonModuleName}`]: {
+					name: stripExt(commonModuleName),
 					chunks: 'initial',
-					name: 'vendor',
 					test({ resource }) {
 						return resource && entryScripts.includes(resource);
 					}
 				},
-				//打包第三方類庫
-				commons: {
-					name: stripExt(commonModuleName),
-					chunks: 'initial',
-					minChunks: Infinity
-				}
+				vendor: {
+					test: /node_modules/,
+					name: 'vendor',
+					enforce: true,
+					chunks: 'all',
+				},
 			})
 		}).apply(compiler);
-		new optimize.RuntimeChunkPlugin({
-			name: 'manifest'
-		}).apply(compiler);
+
+		// new optimize.RuntimeChunkPlugin({ name: 'runtime' }).apply(compiler);
+
 	}
 
 	addScriptEntry(compiler, entry, name) {
@@ -372,7 +378,8 @@ export default class MiniProgramWebpackPlugin {
 
 	compileScripts(compiler) {
 		this.applyCommonsChunk(compiler);
-		this.entryResources.concat(...this.entrySubPackages)
+		const { entryResources, entrySubPackages } = this;
+		[].concat(entryResources, ...entrySubPackages)
 			.filter(resource => resource !== 'app')
 			.forEach(resource => {
 				const fullPath = this.getFullScriptPath(resource);
