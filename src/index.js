@@ -1,16 +1,16 @@
 import { existsSync, readFile, readJson, remove, stat } from 'fs-extra';
 import { dirname, join, parse, relative, resolve } from 'path';
-import { LoaderTargetPlugin, optimize, web } from 'webpack';
+import { LoaderTargetPlugin, optimize } from 'webpack';
 import { ConcatSource } from 'webpack-sources';
 import globby from 'globby';
 import { defaults, uniq, values } from 'lodash';
+
 import MultiEntryPlugin from 'webpack/lib/MultiEntryPlugin';
 import SingleEntryPlugin from 'webpack/lib/SingleEntryPlugin';
 import FunctionModulePlugin from 'webpack/lib/FunctionModulePlugin';
 import NodeSourcePlugin from 'webpack/lib/node/NodeSourcePlugin';
-
-const { JsonpTemplatePlugin } = web;
-const { SplitChunksPlugin } = optimize;
+import JsonpTemplatePlugin from 'webpack/lib/web/JsonpTemplatePlugin';
+import webpack from 'webpack';
 
 const deprecated = function deprecated(obj, key, adapter, explain) {
 	if (deprecated.warned.has(key)) {
@@ -33,10 +33,10 @@ const stripExt = path => {
 
 const miniProgramTarget = compiler => {
 	const { options } = compiler;
-	(new JsonpTemplatePlugin(options.output),
-	new FunctionModulePlugin(options.output),
-	new NodeSourcePlugin(options.node),
-	new LoaderTargetPlugin('web')).apply(compiler);
+	new JsonpTemplatePlugin(options.output).apply(compiler);
+	new FunctionModulePlugin(options.output).apply(compiler);
+	new NodeSourcePlugin(options.node).apply(compiler);
+	new LoaderTargetPlugin('web').apply(compiler);
 };
 
 export const Targets = {
@@ -302,7 +302,7 @@ export default class MiniProgramWebpackPlugin {
 	}
 
 	addEntries(compiler, entries, chunkName) {
-		(new MultiEntryPlugin(this.base, entries, chunkName)).apply(compiler);
+		new MultiEntryPlugin(this.base, entries, chunkName).apply(compiler);
 	}
 
 	async compileAssets(compiler) {
@@ -339,10 +339,8 @@ export default class MiniProgramWebpackPlugin {
 	}
 
 	applyCommonsChunk(compiler) {
-		const {
-			options: { commonModuleName },
-			entryResources, entrySubPackages
-		} = this;
+		const { options, entryResources, entrySubPackages } = this;
+		const { commonModuleName } = options;
 
 		const cacheGroups = {};
 
@@ -362,17 +360,33 @@ export default class MiniProgramWebpackPlugin {
 			name: commonModuleName,
 		};
 
-		(new SplitChunksPlugin({
-			chunks: 'all',
+		new optimize.SplitChunksPlugin({
 			cacheGroups: {
+				default: {
+					minChunks: 2,
+					priority: -20,
+					reuseExistingChunk: true,
+				},
+				//打包重複出現的程式碼
+				vendor: {
+					chunks: 'initial',
+					minChunks: 2,
+					maxInitialRequests: 5, // The default limit is too small to showcase the effect
+					minSize: 0, // This is example is too small to create commons chunks
+					name: 'vendor'
+				},
+				//打包第三方類庫
 				commons: {
-					chunks: 'async',
-					name: 'commons-async',
-					minSize: 0,
-					minChunks: 2
+					name: 'commons',
+					chunks: 'initial',
+					minChunks: Infinity
 				}
 			}
-		})).apply(compiler);
+		}).apply(compiler);
+
+		new optimize.RuntimeChunkPlugin({
+			name: 'manifest'
+		}).apply(compiler);
 
 	}
 
