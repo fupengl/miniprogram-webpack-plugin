@@ -322,35 +322,35 @@ export default class MiniProgramWebpackPlugin {
 
 	applyCommonsChunk(compiler) {
 		const { options: { commonModuleName }, entryResources, entrySubPackages } = this;
+		const entryScripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
 
-		// const entryScripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
+		const cacheGroups = {};
+		entrySubPackages.forEach((item, index) => {
+			if (item.length) {
 
-		// entrySubPackages.forEach((item, index) => {
-		// 	if (item.length) {
-		// 		const cacheGroups = {};
-		//
-		// 		const temp = item[0].split('/');
-		// 		const subpackageName = temp.slice(0, temp.length - 1).join('/');
-		// 		const subScripts = item.map(::this.getFullScriptPath).filter(v => v);
-		//
-		// 		cacheGroups[subpackageName.replace(/\//g, '')] = {
-		// 			name: stripExt(`${subpackageName}/${commonModuleName}`),
-		// 			chunks: 'initial',
-		// 			// enforce: true,
-		// 			reuseExistingChunk: false,
-		// 			priority: 0,
-		// 			test({ context }) {
-		// 				return context && subScripts.includes(context);
-		// 			}
-		// 		};
-		//
-		// 	}
-		// });
+				const temp = item[0].split('/');
+				const subpackageName = temp.slice(0, temp.length - 1).join('/');
+				const subScripts = item.map(::this.getFullScriptPath).filter(v => v);
+
+				cacheGroups[subpackageName.replace(/\//g, '')] = {
+					name: stripExt(`${subpackageName}/${commonModuleName}`),
+					chunks: 'initial',
+					minSize: 0,
+					enforce: true,
+					test({ context }) {
+						return context && subScripts.includes(context);
+					}
+				};
+
+			}
+		});
 
 		new SplitChunksPlugin({
 			chunks: 'all',
-			maxSize: 0,
-			minChunks: 2
+			minSize: 0,
+			minChunks: 2,
+			enforce: true,
+			name: true,
 		}).apply(compiler);
 
 		new RuntimeChunkPlugin({ name: 'runtime' }).apply(compiler);
