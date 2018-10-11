@@ -10,6 +10,8 @@ import SingleEntryPlugin from 'webpack/lib/SingleEntryPlugin';
 import FunctionModulePlugin from 'webpack/lib/FunctionModulePlugin';
 import NodeSourcePlugin from 'webpack/lib/node/NodeSourcePlugin';
 import JsonpTemplatePlugin from 'webpack/lib/web/JsonpTemplatePlugin';
+import SplitChunksPlugin from 'webpack/lib/optimize/SplitChunksPlugin';
+import RuntimeChunkPlugin from 'webpack/lib/optimize/RuntimeChunkPlugin';
 
 const deprecated = function deprecated(obj, key, adapter, explain) {
 	if (deprecated.warned.has(key)) {
@@ -210,10 +212,7 @@ export default class MiniProgramWebpackPlugin {
 	}
 
 	async getEntryResource() {
-		const {
-			options: { exclude, dot },
-			base
-		} = this;
+		const { base } = this;
 		const appJSONFile = resolve(base, 'app.json');
 		const { pages = [], tabBar = {}, subPackages = [] } = await readJson(
 			appJSONFile
@@ -324,48 +323,37 @@ export default class MiniProgramWebpackPlugin {
 	applyCommonsChunk(compiler) {
 		const { options: { commonModuleName }, entryResources, entrySubPackages } = this;
 
-		const entryScripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
+		// const entryScripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
 
-		const cacheGroups = {};
-		entrySubPackages.forEach(item => {
-			if (item.length) {
-				const temp = item[0].split('/');
-				const subpackageName = temp.slice(0, temp.length - 1).join('/');
-				const subScripts = item.map(::this.getFullScriptPath).filter(v => v);
+		// entrySubPackages.forEach((item, index) => {
+		// 	if (item.length) {
+		// 		const cacheGroups = {};
+		//
+		// 		const temp = item[0].split('/');
+		// 		const subpackageName = temp.slice(0, temp.length - 1).join('/');
+		// 		const subScripts = item.map(::this.getFullScriptPath).filter(v => v);
+		//
+		// 		cacheGroups[subpackageName.replace(/\//g, '')] = {
+		// 			name: stripExt(`${subpackageName}/${commonModuleName}`),
+		// 			chunks: 'initial',
+		// 			// enforce: true,
+		// 			reuseExistingChunk: false,
+		// 			priority: 0,
+		// 			test({ context }) {
+		// 				return context && subScripts.includes(context);
+		// 			}
+		// 		};
+		//
+		// 	}
+		// });
 
-				cacheGroups[subpackageName.replace(/\//g, '')] = {
-					name: stripExt(`${subpackageName}/${commonModuleName}`),
-					chunks: 'initial',
-					enforce: true,
-					minChunks: 1,
-					test({ resource }) {
-						return resource && subScripts.includes(resource);
-					}
-				};
-			}
-		});
-
-		new optimize.SplitChunksPlugin({
+		new SplitChunksPlugin({
 			chunks: 'all',
-			cacheGroups: Object.assign({}, cacheGroups, {
-				default: false,
-				[`${commonModuleName}`]: {
-					name: stripExt(commonModuleName),
-					chunks: 'initial',
-					test({ resource }) {
-						return resource && entryScripts.includes(resource);
-					}
-				},
-				vendor: {
-					test: /node_modules/,
-					name: 'vendor',
-					enforce: true,
-					chunks: 'all',
-				},
-			})
+			maxSize: 0,
+			minChunks: 2
 		}).apply(compiler);
 
-		// new optimize.RuntimeChunkPlugin({ name: 'runtime' }).apply(compiler);
+		new RuntimeChunkPlugin({ name: 'runtime' }).apply(compiler);
 
 	}
 
@@ -377,7 +365,6 @@ export default class MiniProgramWebpackPlugin {
 	}
 
 	compileScripts(compiler) {
-		this.applyCommonsChunk(compiler);
 		const { entryResources, entrySubPackages } = this;
 		[].concat(entryResources, ...entrySubPackages)
 			.filter(resource => resource !== 'app')
@@ -385,6 +372,7 @@ export default class MiniProgramWebpackPlugin {
 				const fullPath = this.getFullScriptPath(resource);
 				this.addScriptEntry(compiler, fullPath, resource);
 			});
+		this.applyCommonsChunk(compiler);
 	}
 
 	toModifyTemplate(compilation) {

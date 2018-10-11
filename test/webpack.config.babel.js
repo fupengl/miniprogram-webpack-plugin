@@ -6,6 +6,19 @@ const ext = process.env.TEST_EXT || 'js';
 
 const include = new RegExp('src');
 
+function getSubPackage() {
+	const entry = {};
+	const { subPackages = [], page = [] } = require(`./src/${ext}/app.json`);
+	subPackages.forEach(item => {
+		entry[item.root.replace(/\//g, '')] = item.pages.map(v => path.join(item.root, v) + `.${ext}`);
+	});
+	return {
+		entry,
+		page: page.map(v => v + `.${ext}`)
+	};
+}
+
+
 export default {
 	entry: {
 		app: [`./src/${ext}/utils/bomPolyfill.js`, `./src/${ext}/app.${ext}`],
