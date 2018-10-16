@@ -1,31 +1,33 @@
 
 import path from 'path';
 import MiniProgramWebpackPlugin, { Targets } from '../src';
+import SplitChunksPlugin from 'webpack/lib/optimize/SplitChunksPlugin';
 
 const ext = process.env.TEST_EXT || 'js';
 
 const include = new RegExp('src');
 
-function getSubPackage() {
-	const entry = {};
-	const { subPackages = [], page = [] } = require(`./src/${ext}/app.json`);
+function getEntryPage() {
+	const subPackEntry = {};
+	const { subPackages = [], pages = [] } = require(`./src/${ext}/app.json`);
 	subPackages.forEach(item => {
-		entry[item.root.replace(/\//g, '')] = item.pages.map(v => path.join(item.root, v) + `.${ext}`);
+		subPackEntry[item.root.replace(/\//g, '')] = item.pages.map(v => path.join(item.root, v) + `.${ext}`);
 	});
 	return {
-		entry,
-		page: page.map(v => v + `.${ext}`)
+		subPackEntry,
+		pages: pages.map(v => v + `.${ext}`)
 	};
 }
 
+// const entryPage = getEntryPage();
 
 export default {
 	entry: {
-		app: [`./src/${ext}/utils/bomPolyfill.js`, `./src/${ext}/app.${ext}`],
+		app: [`./src/${ext}/utils/bomPolyfill.js`, `./src/${ext}/app.${ext}`]
 	},
 	output: {
 		filename: '[name].js',
-		path: path.resolve(__dirname, 'dist', ext),
+		path: path.resolve(__dirname, 'dist', ext)
 	},
 	target: Targets.Wechat,
 	module: {

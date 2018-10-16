@@ -1,6 +1,6 @@
 export default class Product {
 	constructor() {
-		this.name = 'aki product';
+		this.name = 'product';
 	}
 
 	getProductName() {

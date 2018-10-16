@@ -1,7 +1,7 @@
 import { existsSync, readFile, readJson, remove, stat } from 'fs-extra';
 import { dirname, join, parse, relative, resolve } from 'path';
 import { LoaderTargetPlugin, optimize } from 'webpack';
-import { ConcatSource } from 'webpack-sources';
+import { ConcatSource, ReplaceSource } from 'webpack-sources';
 import globby from 'globby';
 import { defaults, uniq, values } from 'lodash';
 
@@ -225,6 +225,8 @@ export default class MiniProgramWebpackPlugin {
 			await this.getComponents(components, resolve(base, page));
 		}
 
+		await Promise.all(components);
+
 		const entryResources = [
 			'app',
 			...pages,
@@ -238,11 +240,15 @@ export default class MiniProgramWebpackPlugin {
 			for (const page of pages) {
 				await this.getComponents(components, resolve(base, join(root, page)));
 			}
+			await Promise.all(components);
+
 			entrySubPackages.push([
 				...pages.map(page => join(root, page)),
 				...components
 			]);
 		}
+
+		await Promise.all(entrySubPackages);
 
 		return { entryResources, entrySubPackages };
 	}
@@ -305,7 +311,7 @@ export default class MiniProgramWebpackPlugin {
 			});
 		});
 
-		const patterns = entryResources.concat(...entrySubPackages)
+		const patterns = [].concat(entryResources, ...entrySubPackages)
 			.map(resource => `${resource}.*`)
 			.concat(include);
 
@@ -325,9 +331,8 @@ export default class MiniProgramWebpackPlugin {
 		const entryScripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
 
 		const cacheGroups = {};
-		entrySubPackages.forEach((item, index) => {
+		entrySubPackages.forEach(item => {
 			if (item.length) {
-
 				const temp = item[0].split('/');
 				const subpackageName = temp.slice(0, temp.length - 1).join('/');
 				const subScripts = item.map(::this.getFullScriptPath).filter(v => v);
@@ -338,22 +343,41 @@ export default class MiniProgramWebpackPlugin {
 					minSize: 0,
 					enforce: true,
 					test({ context }) {
-						return context && subScripts.includes(context);
+						return context && subScripts.some(item => item.includes(context));
 					}
 				};
-
 			}
 		});
 
+		console.log(entryScripts);
+
 		new SplitChunksPlugin({
-			chunks: 'all',
+			chunks: 'async',
 			minSize: 0,
-			minChunks: 2,
+			minChunks: 1,
 			enforce: true,
 			name: true,
+			cacheGroups: Object.assign({}, cacheGroups, {
+				default: false,
+				[commonModuleName]: {
+					name: stripExt(commonModuleName),
+					priority: 10,
+					enforce: true,
+					test({ context }) {
+						return context && entryScripts.some(item => item.includes(context));
+					},
+				},
+				vendor: {
+					chunks: 'all',
+					test: /node_modules\//,
+					name: stripExt('vendors'),
+					priority: 10,
+					enforce: true
+				},
+			})
 		}).apply(compiler);
 
-		new RuntimeChunkPlugin({ name: 'runtime' }).apply(compiler);
+		// new RuntimeChunkPlugin().apply(compiler);
 
 	}
 
@@ -381,30 +405,44 @@ export default class MiniProgramWebpackPlugin {
 		const commonChunkName = stripExt(commonModuleName);
 		const globalVar = target.name === 'Alipay' ? 'my' : 'wx';
 
+		const replaceSelf = (source) => {
+			const concatSource = new ConcatSource();
+			if (source.indexOf(`self["webpackJsonp"]`) > -1) {
+				source = source.replace(/self\["webpackJsonp"\]/g, `${globalVar}["webpackJsonp"]`);
+			}
+			concatSource.add(source);
+			return concatSource;
+		};
 
 		// inject chunk entries
-		compilation.chunkTemplate.hooks.render.tap('MiniProgramWebpackPlugin', (core, { name }) => {
+		compilation.chunkTemplate.hooks.render.tap('MiniProgramWebpackPlugin', (core, chunk) => {
+			let concatSource = new ConcatSource(core);
+			let source = core.source();
+			concatSource = replaceSelf(source);
+			return concatSource;
+		});
 
-			if (this.entryResources.indexOf(name) >= 0) {
-				const relativePath = relative(dirname(name), `./${commonModuleName}`);
+		compilation.mainTemplate.hooks.render.tap('MiniProgramWebpackPlugin', (core, chunk) => {
+			let concatSource = new ConcatSource(core);
+			let source = core.source();
+			concatSource = replaceSelf(source);
+			if (this.entryResources.indexOf(chunk.name) >= 0) {
+				const relativePath = relative(dirname(chunk.name), `./vendors`);
 				const posixPath = relativePath.replace(/\\/g, '/');
-				const source = core.source();
 
 				// eslint-disable-next-line max-len
-				const injectContent = `; function webpackJsonp() { require("./${posixPath}"); ${globalVar}.webpackJsonp.apply(null, arguments); }`;
+				const injectContent = `;require("./${posixPath}");`;
 
 				if (source.indexOf(injectContent) < 0) {
-					const concatSource = new ConcatSource(core);
 					concatSource.add(injectContent);
-					return concatSource;
 				}
 			}
-			return core;
+			return concatSource;
 		});
 
 		// replace `window` to `global` in common chunk
 		compilation.mainTemplate.hooks.bootstrap.tap('MiniProgramWebpackPlugin', (source, chunk) => {
-			const windowRegExp = new RegExp('window', 'g');
+			const windowRegExp = new RegExp('self', 'g');
 			if (chunk.name === commonChunkName) {
 				return source.replace(windowRegExp, globalVar);
 			}
