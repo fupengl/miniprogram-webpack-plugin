@@ -1,7 +1,7 @@
-import { existsSync, readFile, readJson, remove, stat } from 'fs-extra';
+import { existsSync, readFile, readJson, emptydirSync, stat } from 'fs-extra';
 import { dirname, join, parse, relative, resolve } from 'path';
 import { LoaderTargetPlugin, optimize } from 'webpack';
-import { ConcatSource, ReplaceSource } from 'webpack-sources';
+import { ConcatSource } from 'webpack-sources';
 import globby from 'globby';
 import { defaults, uniq, values } from 'lodash';
 
@@ -286,7 +286,7 @@ export default class MiniProgramWebpackPlugin {
 
 	async clear(compilation) {
 		const { path } = compilation.options.output;
-		await remove(path);
+		await emptydirSync(path);
 	}
 
 	addEntries(compiler, entries, chunkName) {
@@ -327,7 +327,7 @@ export default class MiniProgramWebpackPlugin {
 	}
 
 	applyCommonsChunk(compiler) {
-		const { options: { commonModuleName }, entryResources, entrySubPackages } = this;
+		const { options: { commonModuleName, extensions }, entryResources, entrySubPackages } = this;
 		const entryScripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
 
 		const cacheGroups = {};
@@ -343,13 +343,15 @@ export default class MiniProgramWebpackPlugin {
 					minSize: 0,
 					enforce: true,
 					test({ context }) {
+						// const script = extensions.map(ext => context + ext).filter(f => { if (existsSync(f)) return f; });
+						// return context && subScripts.some(item => script.some(item1 => item1 === item));
 						return context && subScripts.some(item => item.includes(context));
 					}
 				};
 			}
 		});
 
-		console.log(entryScripts);
+		console.log(entryResources);
 
 		new SplitChunksPlugin({
 			chunks: 'async',
@@ -357,16 +359,19 @@ export default class MiniProgramWebpackPlugin {
 			minChunks: 1,
 			enforce: true,
 			name: true,
-			cacheGroups: Object.assign({}, cacheGroups, {
+			cacheGroups: {
 				default: false,
 				[commonModuleName]: {
 					name: stripExt(commonModuleName),
 					priority: 10,
 					enforce: true,
 					test({ context }) {
+						console.log(context);
+						// const script = extensions.map(ext => context + ext).filter(f => { if (existsSync(f)) return f; });
 						return context && entryScripts.some(item => item.includes(context));
 					},
 				},
+				// ...cacheGroups,
 				vendor: {
 					chunks: 'all',
 					test: /node_modules\//,
@@ -374,7 +379,7 @@ export default class MiniProgramWebpackPlugin {
 					priority: 10,
 					enforce: true
 				},
-			})
+			}
 		}).apply(compiler);
 
 		// new RuntimeChunkPlugin().apply(compiler);
