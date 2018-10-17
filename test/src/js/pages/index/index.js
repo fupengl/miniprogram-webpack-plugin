@@ -1,5 +1,6 @@
 
 import { flow } from 'lodash';
+import { formatTime } from '../../utils/util';
 
 //获取应用实例
 const app = getApp(); // eslint-disable-line no-undef
@@ -23,7 +24,7 @@ Page({
 	onLoad() {
 
 		const log = flow(() => {
-			console.log('onLoad');
+			console.log(formatTime(new Date()));
 		});
 
 		log();

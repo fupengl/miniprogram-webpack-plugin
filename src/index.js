@@ -331,58 +331,73 @@ export default class MiniProgramWebpackPlugin {
 		const entryScripts = entryResources.map(::this.getFullScriptPath).filter(v => v);
 
 		const cacheGroups = {};
-		entrySubPackages.forEach(item => {
+		entrySubPackages.forEach((item, index) => {
 			if (item.length) {
 				const temp = item[0].split('/');
 				const subpackageName = temp.slice(0, temp.length - 1).join('/');
-				const subScripts = item.map(::this.getFullScriptPath).filter(v => v);
+				const subScripts = item.map(::this.getFullScriptPath).filter(v => v && !entryScripts.includes(v));
 
 				cacheGroups[subpackageName.replace(/\//g, '')] = {
 					name: stripExt(`${subpackageName}/${commonModuleName}`),
 					chunks: 'initial',
 					minSize: 0,
+					priority: index + 2,
+					minChunks: 1,
 					enforce: true,
 					test({ context }) {
 						// const script = extensions.map(ext => context + ext).filter(f => { if (existsSync(f)) return f; });
 						// return context && subScripts.some(item => script.some(item1 => item1 === item));
-						return context && subScripts.some(item => item.includes(context));
+						return context && subScripts.some(item => {
+							const temp = item.split('/').filter(v => v);
+							if (temp.length > 2) {
+								temp.pop();
+								return `/${temp.join('/')}/`.includes(`/${context.split('/').filter(v => v !== '.' && v).join('/')}/`);
+							}
+							return context === item;
+						});
 					}
 				};
 			}
 		});
 
-		console.log(entryResources);
+		// new RuntimeChunkPlugin({ name: 'runtime' }).apply(compiler);
 
 		new SplitChunksPlugin({
-			chunks: 'async',
+			chunks: 'initial',
 			minSize: 0,
 			minChunks: 1,
-			enforce: true,
 			name: true,
 			cacheGroups: {
 				default: false,
-				[commonModuleName]: {
-					name: stripExt(commonModuleName),
-					priority: 10,
-					enforce: true,
+				priority: 1,
+				common: {
+					name: stripExt(`${commonModuleName}`),
+					priority: 0,
+					minChunks: 1,
+					minSize: 0,
+					chunks: 'all',
 					test({ context }) {
-						console.log(context);
-						// const script = extensions.map(ext => context + ext).filter(f => { if (existsSync(f)) return f; });
-						return context && entryScripts.some(item => item.includes(context));
+						return context && entryScripts.some(item => {
+							const temp = item.split('/').filter(v => v);
+							if (temp.length > 2) {
+								temp.pop();
+								return `/${temp.join('/')}/`.includes(`/${context.split('/').filter(v => v !== '.' && v).join('/')}/`);
+							}
+							return context === item;
+						});
 					},
 				},
-				// ...cacheGroups,
 				vendor: {
 					chunks: 'all',
 					test: /node_modules\//,
 					name: stripExt('vendors'),
-					priority: 10,
+					priority: 0,
 					enforce: true
 				},
+				...cacheGroups
 			}
 		}).apply(compiler);
 
-		// new RuntimeChunkPlugin().apply(compiler);
 
 	}
 
@@ -436,7 +451,7 @@ export default class MiniProgramWebpackPlugin {
 				const posixPath = relativePath.replace(/\\/g, '/');
 
 				// eslint-disable-next-line max-len
-				const injectContent = `;require("./${posixPath}");`;
+				const injectContent = `;require("./${posixPath}")`;
 
 				if (source.indexOf(injectContent) < 0) {
 					concatSource.add(injectContent);
