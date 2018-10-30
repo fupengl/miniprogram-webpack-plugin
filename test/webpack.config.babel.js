@@ -1,7 +1,6 @@
 
 import path from 'path';
 import MiniProgramWebpackPlugin, { Targets } from '../src';
-import SplitChunksPlugin from 'webpack/lib/optimize/SplitChunksPlugin';
 
 const ext = process.env.TEST_EXT || 'js';
 
@@ -18,8 +17,6 @@ function getEntryPage() {
 		pages: pages.map(v => v + `.${ext}`)
 	};
 }
-
-// const entryPage = getEntryPage();
 
 export default {
 	entry: {
