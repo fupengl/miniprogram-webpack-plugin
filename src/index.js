@@ -1,3 +1,4 @@
+/* eslint-disable no-useless-constructor */
 require('console.table');
 const colors = require('colors');
 const fs = require('fs');
@@ -36,7 +37,7 @@ class MiniPlugin extends MiniProgam {
 	apply(compiler) {
 		this.compiler = compiler;
 		this.outputPath = compiler.options.output.path;
-		this.compilerContext = join(compiler.context, 'src');
+		this.compilerContext = join(compiler.context);
 
 		this._appending = [];
 
@@ -66,7 +67,7 @@ class MiniPlugin extends MiniProgam {
 		this.miniEntrys = utils.formatEntry(compiler.options.entry, this.chunkNames);
 
 		// 获取打包后路径（在 loader 中有使用）
-		this.getDistFilePath = () => {};
+		this.getDistFilePath = () => { };
 
 		// hooks
 		this.compiler.hooks.environment.tap('MiniPlugin', this.setEnvHook.bind(this));
@@ -77,7 +78,7 @@ class MiniPlugin extends MiniProgam {
 	}
 
 	beforeCompile(params, callback) {
-		this.loadEntrys(this.miniEntrys)
+		this.loadEntrys(this.miniEntrys, this.compilerContext)
 			.then(() => {
 				let resourcePaths = new Set(
 					this.entryContexts.concat(
@@ -142,15 +143,16 @@ class MiniPlugin extends MiniProgam {
 			for (const chunk of chunks) {
 				if (chunk.hasEntryModule() && !ignoreEntrys.indexOf(chunk.name) !== 0) {
 					// 记录模块之间依赖关系
-					for (const module of chunk.getModules())
-					{ if (!module.isEntryModule()) {
-						const resourcePath = module.resource;
-						let relPath = this.getDistFilePath(resourcePath);
-						let chunkName = chunk.name + '.js';
-						utils.setMapValue(DEPS_MAP, relPath, chunkName);
+					for (const module of chunk.getModules()) {
+						if (!module.isEntryModule()) {
+							const resourcePath = module.resource;
+							let relPath = this.getDistFilePath(resourcePath);
+							let chunkName = chunk.name + '.js';
+							utils.setMapValue(DEPS_MAP, relPath, chunkName);
 
-						module._usedModules = DEPS_MAP[relPath];
-					} }
+							module._usedModules = DEPS_MAP[relPath];
+						}
+					}
 				}
 			}
 		});

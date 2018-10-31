@@ -7,7 +7,7 @@ const ext = process.env.TEST_EXT || 'js';
 const include = new RegExp('src');
 
 export default {
-	entry: [`./src/${ext}/app.json`],
+	entry: `./src/${ext}/app.json`,
 	output: {
 		filename: '[name].js',
 		path: path.resolve(__dirname, 'dist', ext)

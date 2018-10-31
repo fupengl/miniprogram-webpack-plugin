@@ -228,8 +228,8 @@ module.exports = class MiniProgam {
 		});
 	}
 
-	async loadEntrys(entry) {
-		this.entrys = entry = typeof entry === typeof '' ? [entry] : entry;
+	async loadEntrys(entry, context) {
+		this.entrys = entry = typeof entry === 'string' ? [entry] : entry;
 		this.checkEntry(entry);
 		let index = 0;
 
@@ -238,10 +238,9 @@ module.exports = class MiniProgam {
 
 		let promiseSet = new Set();
 
-		console.log(context);
-
 		for (const item of entry) {
 			const entryPath = isAbsolute(item) ? item : join(context, item);
+			console.log(entryPath);
 
 			this.checkEntry(entryPath);
 
@@ -301,10 +300,10 @@ module.exports = class MiniProgam {
 		];
 
 		// tabBar icons
-		entrys.concat(tabBar && tabBar.list && this.getTabBarIcons(this.mainContext, tabBar.list) || []);
+		entrys.concat((tabBar && tabBar.list && this.getTabBarIcons(this.mainContext, tabBar.list)) || []);
 
 		this.addEntrys(this.mainContext, flattenDeep(entrys));
-		return await Promise.all(Array.from(promiseSet));
+		return Promise.all(Array.from(promiseSet));
 	}
 
 	async loadComponentsFiles(pageFiles, componentSet) {
