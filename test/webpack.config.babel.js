@@ -1,32 +1,17 @@
 
 import path from 'path';
-import MiniProgramWebpackPlugin, { Targets } from '../src';
+import MiniPlugin from '../src';
 
 const ext = process.env.TEST_EXT || 'js';
 
 const include = new RegExp('src');
 
-function getEntryPage() {
-	const subPackEntry = {};
-	const { subPackages = [], pages = [] } = require(`./src/${ext}/app.json`);
-	subPackages.forEach(item => {
-		subPackEntry[item.root.replace(/\//g, '')] = item.pages.map(v => path.join(item.root, v) + `.${ext}`);
-	});
-	return {
-		subPackEntry,
-		pages: pages.map(v => v + `.${ext}`)
-	};
-}
-
 export default {
-	entry: {
-		app: [`./src/${ext}/utils/bomPolyfill.js`, `./src/${ext}/app.${ext}`]
-	},
+	entry: [`./src/${ext}/app.json`],
 	output: {
 		filename: '[name].js',
 		path: path.resolve(__dirname, 'dist', ext)
 	},
-	target: Targets.Wechat,
 	module: {
 		rules: [
 			{
@@ -51,9 +36,7 @@ export default {
 		],
 	},
 	plugins: [
-		new MiniProgramWebpackPlugin({
-			extensions: [`.${ext}`, '.ts'],
-		})
+		new MiniPlugin()
 	],
 	devtool: 'source-map',
 	resolve: {
