@@ -18,7 +18,7 @@ Page({
 	},
 	goToSubList() {
 		wx.navigateTo({
-			url: '/subPackages/product/productList',
+			url: '../product/productList',
 		});
 	},
 	onLoad() {
