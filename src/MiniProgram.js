@@ -1,3 +1,4 @@
+/* eslint-disable no-return-await */
 const { existsSync } = require('fs');
 const {
 	dirname,
@@ -228,7 +229,7 @@ module.exports = class MiniProgam {
 		});
 	}
 
-	async loadEntrys(entry, context) {
+	async loadEntrys(entry) {
 		this.entrys = entry = typeof entry === 'string' ? [entry] : entry;
 		this.checkEntry(entry);
 		let index = 0;
@@ -303,7 +304,7 @@ module.exports = class MiniProgam {
 		entrys.concat((tabBar && tabBar.list && this.getTabBarIcons(this.mainContext, tabBar.list)) || []);
 
 		this.addEntrys(this.mainContext, flattenDeep(entrys));
-		return Promise.all(Array.from(promiseSet));
+		return await Promise.all(Array.from(promiseSet));
 	}
 
 	async loadComponentsFiles(pageFiles, componentSet) {

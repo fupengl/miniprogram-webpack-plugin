@@ -5,11 +5,7 @@ const fs = require('fs');
 const readline = require('readline');
 const {
 	dirname,
-	join,
-	relative,
-	extname,
-	basename,
-	isAbsolute
+	join
 } = require('path');
 const { ProgressPlugin } = require('webpack');
 const { ConcatSource } = require('webpack-sources');
@@ -49,12 +45,11 @@ class MiniPlugin extends MiniProgam {
 		new ProgressPlugin({ handler: this.progress }).apply(compiler);
 
 		const resolver = ResolverFactory.createResolver(
-			Object.assign(
-				{
-					fileSystem: new CachedInputFileSystem(new NodeJsInputFileSystem(), 4000),
-					extensions: ['.js', '.json'],
-				},
-				this.compiler.options.resolve
+			Object.assign({
+				fileSystem: new CachedInputFileSystem(new NodeJsInputFileSystem(), 4000),
+				extensions: ['.js', '.json'],
+			},
+			this.compiler.options.resolve
 			)
 		);
 
@@ -78,7 +73,7 @@ class MiniPlugin extends MiniProgam {
 	}
 
 	beforeCompile(params, callback) {
-		this.loadEntrys(this.miniEntrys, this.compilerContext)
+		this.loadEntrys(this.miniEntrys)
 			.then(() => {
 				let resourcePaths = new Set(
 					this.entryContexts.concat(
@@ -92,6 +87,8 @@ class MiniPlugin extends MiniProgam {
 				this.getDistFilePath = utils.getDistPath(this.compilerContext, Array.from(resourcePaths), this.outputPath);
 
 				callback();
+			}).catch(e => {
+				console.log(e);
 			});
 	}
 	/**
@@ -126,7 +123,7 @@ class MiniPlugin extends MiniProgam {
 
 		compilation.hooks.additionalAssets.tapAsync('MiniPlugin', callback => {
 			compilation.assets['webpack-require.js'] = new ConcatSource(
-				fs.readFileSync(join(__dirname, './lib/require.js'), 'utf8')
+				fs.readFileSync(join(__dirname, './require.js'), 'utf8')
 			);
 			callback();
 		});

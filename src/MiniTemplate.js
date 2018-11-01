@@ -1,9 +1,6 @@
 const { dirname, relative, join } = require('path');
 
-const {
-	ConcatSource,
-	RawSource
-} = require('webpack-sources');
+const { ConcatSource, RawSource } = require('webpack-sources');
 
 const Template = require('webpack/lib/Template');
 
@@ -16,7 +13,7 @@ module.exports = class MiniTemplate {
 	apply(compiler) {
 		this.compiler = compiler;
 
-		compiler.hooks.compilation.tap('MiniTemplate', (compilation) => {
+		compiler.hooks.compilation.tap('MiniTemplate', compilation => {
 			this.compilation = compilation;
 
 			compilation.mainTemplate.hooks.render.tap('MiniTemplate', this.setRender.bind(this));
