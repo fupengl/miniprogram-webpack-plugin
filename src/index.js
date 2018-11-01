@@ -108,6 +108,7 @@ module.exports = class MiniProgramWebpackPlugin {
 	}
 
 	moduleOnlyUsedBySubPackage(module, root) {
+
 		if (!/\.js$/.test(module.resource) || module.isEntryModule()) return false;
 
 		let usedFiles = module._usedModules;
@@ -212,15 +213,14 @@ module.exports = class MiniProgramWebpackPlugin {
 	}
 
 	decorateChunks(compilation) {
-		compilation.chunkTemplate.hooks.render.tap(PLUGIN_NAME, (source, {
-			name
-		}) => {
-			const windowRegExp = new RegExp('window', 'g');
+		const windowRegExp = new RegExp('window', 'g');
+
+		compilation.chunkTemplate.hooks.render.tap(PLUGIN_NAME, (source) => {
 			return new ConcatSource(source.source().replace(windowRegExp, 'wx'));
 		});
+
 		compilation.mainTemplate.hooks.render.tap(PLUGIN_NAME, (source, chunk) => {
 			// return source
-			const windowRegExp = new RegExp('window', 'g');
 			const relativePath = path.relative(path.dirname(path.resolve(this.basePath, chunk.name)), path.resolve(this.basePath, this.options.vendorFilename));
 			const posixPath = relativePath.replace(/\\/g, '/');
 			// eslint-disable-next-line max-len
