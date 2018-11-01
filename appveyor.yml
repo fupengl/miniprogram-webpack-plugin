@@ -19,18 +19,18 @@ install:
   # Get the latest stable version of Node.js or io.js
   - ps: Install-Product node $env:nodejs_version
 
-  - appveyor-retry yarn
+  - appveyor-retry npm
 
   # install modules
-  - yarn
+  - npm i
 
 
 # Post-install test scripts.
 test_script:
   # Output useful info for debugging
-  - node --version && yarn --version
+  - node --version && npm --version
   # run tests
-  - yarn test
+  - npm run test
 
 # Don't actually build.
 build: off
