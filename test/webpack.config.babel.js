@@ -1,4 +1,3 @@
-
 import path from 'path';
 import MiniPlugin from '../src';
 
@@ -13,13 +12,12 @@ export default {
 		path: path.resolve(__dirname, 'dist', ext)
 	},
 	module: {
-		rules: [
-			{
+		rules: [{
 				test: /\.(ts|js)$/,
 				include,
 				loader: 'babel-loader',
 				options: {
-					presets: ['es2015', 'stage-0'],
+					presets: ['@babel/preset-env'],
 					babelrc: false,
 				}
 			},

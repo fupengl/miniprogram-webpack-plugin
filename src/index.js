@@ -73,7 +73,7 @@ class MiniPlugin extends MiniProgam {
 	}
 
 	beforeCompile(params, callback) {
-		this.loadEntrys(this.miniEntrys)
+		this.loadEntrys(this.miniEntrys,this.compilerContext)
 			.then(() => {
 				let resourcePaths = new Set(
 					this.entryContexts.concat(

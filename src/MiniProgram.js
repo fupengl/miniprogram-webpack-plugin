@@ -1,5 +1,7 @@
 /* eslint-disable no-return-await */
-const { existsSync } = require('fs');
+const {
+	existsSync
+} = require('fs');
 const {
 	dirname,
 	join,
@@ -8,7 +10,10 @@ const {
 	basename,
 	isAbsolute
 } = require('path');
-const { ConcatSource, RawSource } = require('webpack-sources');
+const {
+	ConcatSource,
+	RawSource
+} = require('webpack-sources');
 const MultiEntryPlugin = require('webpack/lib/MultiEntryPlugin');
 const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin');
 
@@ -25,8 +30,7 @@ module.exports = class MiniProgam {
 	constructor(options) {
 		this.chunkNames = ['main'];
 
-		this.options = Object.assign(
-			{
+		this.options = Object.assign({
 				extfile: true,
 				commonSubPackages: true,
 				analyze: false,
@@ -51,8 +55,8 @@ module.exports = class MiniProgam {
 
 	getAppJson() {
 		/**
-     *  合并所有 .json 的代码到 app.json
-     */
+		 *  合并所有 .json 的代码到 app.json
+		 */
 		let code = Object.assign({}, this.appJsonCode);
 
 		this.entrys.forEach((entry) => {
@@ -104,28 +108,28 @@ module.exports = class MiniProgam {
 	setAppJson(config, resourcePath) {
 		const {
 			pages = [],
-			subPackages = [],
-			preloadRule = {},
-			tabBar,
-			window,
-			networkTimeout,
-			debug,
-			functionalPages,
-			plugins = {}
+				subPackages = [],
+				preloadRule = {},
+				tabBar,
+				window,
+				networkTimeout,
+				debug,
+				functionalPages,
+				plugins = {}
 		} = config;
 
 		let appJson = this.appJsonCode[resourcePath] = {};
 
 		/**
-     * 保存 app.json 中的内容
-     */
+		 * 保存 app.json 中的内容
+		 */
 		appJson.pages = pages;
 		appJson.subPackages = subPackages;
 		appJson.preloadRule = preloadRule;
 		this.appJsonCode.tabBar = this.appJsonCode.tabBar || tabBar;
 		/**
-     * 插件
-     */
+		 * 插件
+		 */
 		Object.keys(plugins).forEach((key) => {
 			if (this.appJsonCode.plugins[key]) {
 				if (plugins.version !== plugins[key].version) {
@@ -137,8 +141,8 @@ module.exports = class MiniProgam {
 		});
 
 		/**
-     * 其他配置使用最前面的配置
-     */
+		 * 其他配置使用最前面的配置
+		 */
 		this.appJsonCode.window = this.appJsonCode.window || window;
 		this.appJsonCode.networkTimeout = this.appJsonCode.networkTimeout || networkTimeout;
 		this.appJsonCode.debug = this.appJsonCode.debug || debug;
@@ -160,8 +164,8 @@ module.exports = class MiniProgam {
 
 	getIgnoreEntrys() {
 		/**
-     * 多个入口，所有文件对应的原始文件将被丢弃
-     */
+		 * 多个入口，所有文件对应的原始文件将被丢弃
+		 */
 		let entryNames = [...new Set(this.entryNames)];
 
 		entryNames = entryNames.map((name) => {
@@ -172,8 +176,8 @@ module.exports = class MiniProgam {
 		entryNames = flattenDeep(entryNames);
 
 		/**
-     * 静态资源的主文件
-     */
+		 * 静态资源的主文件
+		 */
 		entryNames = entryNames.concat(
 			this.chunkNames.map(chunkName => chunkName + '.js')
 		);
@@ -194,8 +198,8 @@ module.exports = class MiniProgam {
 
 	addListenFiles(files) {
 		/**
-     * 添加所有已经监听的文件
-     */
+		 * 添加所有已经监听的文件
+		 */
 		files.forEach((file) => {
 			if (!this.filesSet.has(file)) this.filesSet.add(file);
 		});
@@ -229,7 +233,7 @@ module.exports = class MiniProgam {
 		});
 	}
 
-	async loadEntrys(entry) {
+	async loadEntrys(entry, context) {
 		this.entrys = entry = typeof entry === 'string' ? [entry] : entry;
 		this.checkEntry(entry);
 		let index = 0;
@@ -241,7 +245,6 @@ module.exports = class MiniProgam {
 
 		for (const item of entry) {
 			const entryPath = isAbsolute(item) ? item : join(context, item);
-			console.log(entryPath);
 
 			this.checkEntry(entryPath);
 
@@ -252,8 +255,8 @@ module.exports = class MiniProgam {
 			this.entryNames.push(fileName);
 
 			/**
-       * 主入口
-       */
+			 * 主入口
+			 */
 			if (index === 0) {
 				this.mainEntry = item;
 				this.mainContext = itemContext;
@@ -262,31 +265,30 @@ module.exports = class MiniProgam {
 			}
 
 			/**
-       * 获取配置信息，并设置
-       */
-			const config = require(item);
+			 * 获取配置信息，并设置
+			 */
+			const config = require(entryPath);
 			this.setAppJson(config, item);
 
 			/**
-       * 添加页面
-       */
+			 * 添加页面
+			 */
 			let pageFiles = this.getPagesEntry(config, itemContext);
 
 			let componentSet = new Set();
 
 			promiseSet.add(
 				this.loadComponentsFiles(pageFiles, componentSet)
-					.then(() => {
-						let files = flattenDeep(Array.from(componentSet));
-						this.addEntrys(itemContext, files);
-					})
+				.then(() => {
+					let files = flattenDeep(Array.from(componentSet));
+					this.addEntrys(itemContext, files);
+				})
 			);
-
 			this.addEntrys(itemContext, pageFiles);
 
 			/**
-       * 入口文件只打包对应的 wxss 文件
-       */
+			 * 入口文件只打包对应的 wxss 文件
+			 */
 			let entryFiles = getFiles(itemContext, fileName, ['.wxss']);
 			this.addEntrys(itemContext, entryFiles);
 		}
@@ -318,9 +320,9 @@ module.exports = class MiniProgam {
 		}
 	}
 	/**
-   * 根据 app.json 配置获取页面文件路径
-   * @param {*} entry
-   */
+	 * 根据 app.json 配置获取页面文件路径
+	 * @param {*} entry
+	 */
 	getPagesEntry(config, context) {
 		const pages = this.getNewPages(config, context);
 		const files = pages.map((page) => {
@@ -345,7 +347,10 @@ module.exports = class MiniProgam {
 		return files;
 	}
 
-	getNewPages({ pages = [], subPackages = [] }, context) {
+	getNewPages({
+		pages = [],
+		subPackages = []
+	}, context) {
 		const _newPages = [];
 		const isNewPage = (page) => {
 			if (!this.pagesSet.has(page)) {
@@ -354,7 +359,10 @@ module.exports = class MiniProgam {
 			return false;
 		};
 
-		subPackages.forEach(({ root, pages }) => {
+		subPackages.forEach(({
+			root,
+			pages
+		}) => {
 			let _pages = [];
 
 			pages.map((page) => {
@@ -375,10 +383,10 @@ module.exports = class MiniProgam {
 	}
 
 	/**
-   * 获取 icon 路径
-   * @param {*} context
-   * @param {*} tabs
-   */
+	 * 获取 icon 路径
+	 * @param {*} context
+	 * @param {*} tabs
+	 */
 	getTabBarIcons(context, tabs) {
 		let files = [];
 		for (const tab of tabs) {
@@ -397,8 +405,12 @@ module.exports = class MiniProgam {
 		if (!/\.js$/.test(module.resource) || module.isEntryModule()) return false;
 		if (!module._usedModules) throw new Error('非插件提供的 module，不能调用这个方法');
 
-		let { subPackages } = this.getAppJson();
-		let subRoots = subPackages.map(({ root }) => root) || [];
+		let {
+			subPackages
+		} = this.getAppJson();
+		let subRoots = subPackages.map(({
+			root
+		}) => root) || [];
 		let subReg = new RegExp(subRoots.join('|'));
 		let usedFiles = Array.from(module._usedModules);
 
@@ -429,13 +441,17 @@ module.exports = class MiniProgam {
 	}
 
 	/**
-   * 判断所给的路径在不在自定义组件内
-   * @param {String} path 任意路径
-   */
+	 * 判断所给的路径在不在自定义组件内
+	 * @param {String} path 任意路径
+	 */
 	pathInSubpackage(path) {
-		let { subPackages } = this.getAppJson();
+		let {
+			subPackages
+		} = this.getAppJson();
 
-		for (const { root } of subPackages) {
+		for (const {
+				root
+			} of subPackages) {
 			let match = path.match(root);
 
 			if (match !== null && match.index === 0) {
@@ -447,9 +463,9 @@ module.exports = class MiniProgam {
 	}
 
 	/**
-   * 判断所给的路径集合是不是在同一个包内
-   * @param {Array} paths 路径列表
-   */
+	 * 判断所给的路径集合是不是在同一个包内
+	 * @param {Array} paths 路径列表
+	 */
 	pathsInSamePackage(paths) {
 		// 取第一个路径，获取子包 root，然后和其他路径对比
 		let firstPath = paths[0];
@@ -469,9 +485,9 @@ module.exports = class MiniProgam {
 	}
 
 	/**
-   * 判断列表内数据是不是在同一个目录下
-   * @param {*} paths
-   */
+	 * 判断列表内数据是不是在同一个目录下
+	 * @param {*} paths
+	 */
 	pathsInSameFolder(paths) {
 		let firstPath = paths[0];
 		let folder = firstPath.split('/')[0];
@@ -485,13 +501,17 @@ module.exports = class MiniProgam {
 	}
 
 	/**
-   * 获取路径所在的 package root
-   * @param {String} path
-   */
+	 * 获取路径所在的 package root
+	 * @param {String} path
+	 */
 	getPathRoot(path) {
-		let { subPackages } = this.getAppJson();
+		let {
+			subPackages
+		} = this.getAppJson();
 
-		for (const { root } of subPackages) {
+		for (const {
+				root
+			} of subPackages) {
 			let match = path.match(root);
 
 			if (match !== null && match.index === 0) {
@@ -503,17 +523,17 @@ module.exports = class MiniProgam {
 	}
 
 	/**
-   *
-   * @param {*} root
-   * @param {*} files
-   */
+	 *
+	 * @param {*} root
+	 * @param {*} files
+	 */
 	otherPackageFiles(root, files) {
 		return files.filter(file => file.indexOf(root) === -1);
 	}
 
 	/**
-   * loader 中传递被修改的 app.json
-   */
+	 * loader 中传递被修改的 app.json
+	 */
 	appJsonChange(config, appPath) {
 		this.setAppJson(config, appPath);
 
