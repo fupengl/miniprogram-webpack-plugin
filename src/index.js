@@ -178,13 +178,21 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	applyPlugins(compiler) {
 		const cacheGroups = {
-			common: {
-				test: /[\\/]node_modules[\\/]/,
-				name: 'common',
+			//node_modules
+			vendor: {
 				chunks: 'all',
+				test: /[\\/]node_modules[\\/]/,
+				name: this.options.vendorFilename,
+				minChunks: 2
+			},
+			//其他公用代码
+			common: {
+				chunks: 'all',
+				test: /[\\/]src[\\/]/,
 				minChunks: 2,
-				reuseExistingChunk: true
-			}
+				name: this.options.entryChunkName,
+				minSize: 0
+			},
 		};
 		for (const {
 			root
@@ -202,12 +210,6 @@ module.exports = class MiniProgramWebpackPlugin {
 		}
 
 		new SplitChunksPlugin({
-			chunks: 'all',
-			minSize: 0,
-			maxInitialRequests: 1024,
-			name: true,
-			filename: `./${this.options.vendorFilename}`,
-			automaticNameDelimiter: '~',
 			cacheGroups
 		}).apply(compiler);
 	}
@@ -221,11 +223,13 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		compilation.mainTemplate.hooks.render.tap(PLUGIN_NAME, (source, chunk) => {
 			// return source
-			const relativePath = path.relative(path.dirname(path.resolve(this.basePath, chunk.name)), path.resolve(this.basePath, this.options.vendorFilename));
-			const posixPath = relativePath.replace(/\\/g, '/');
-			// eslint-disable-next-line max-len
-			const injectContent = `;require("./${posixPath}");`;
-			source.add(injectContent);
+			if (chunk.name !== this.options.entryChunkName) {
+				const relativePath = path.relative(path.dirname(path.resolve(this.basePath, chunk.name)), path.resolve(this.basePath, this.options.vendorFilename));
+				const posixPath = relativePath.replace(/\\/g, '/');
+				// eslint-disable-next-line max-len
+				const injectContent = `;require("./${posixPath}");`;
+				source.add(injectContent);
+			}
 			return new ConcatSource(source.source().replace(windowRegExp, 'wx'));
 		});
 	}
