@@ -9,6 +9,7 @@
 		]
 	],
 	"plugins": [
+		"transform-function-bind",
 		"add-module-exports",
 		"@babel/plugin-transform-runtime",
 		[

@@ -11,8 +11,39 @@ export default {
 	},
 	output: {
 		filename: '[name].js',
-		path: path.resolve(__dirname, 'dist', ext)
+		path: path.resolve(__dirname, 'dist', ext),
+		// globalObject: 'global',
 	},
+	// optimization: {
+	// 	splitChunks: {
+	// 		cacheGroups: {
+	// 			default: false,
+	// 			//node_modules
+	// 			vendor: {
+	// 				chunks: 'all',
+	// 				test: /[\\/]node_modules[\\/]/,
+	// 				name: 'vendors',
+	// 				minChunks: 2
+	// 			},
+	// 			//其他公用代码
+	// 			commons: {
+	// 				chunks: 'all',
+	// 				test: /[\\/]src[\\/]/,
+	// 				minChunks: 2,
+	// 				name: 'commons',
+	// 				minSize: 0
+	// 			},
+	// 			// product: {
+	// 			//     chunks: 'all',
+	// 			//     test: /[\\/]subpackages[\\/]product[\\/]/,
+	// 			//     minChunks: 2,
+	// 			//     name:"subpackages/product/test",
+	// 			//     minSize:0
+	// 			// }
+	// 		}
+	// 	},
+	// 	runtimeChunk: 'single'
+	// },
 	module: {
 		rules: [{
 			test: /\.(ts|js)$/,

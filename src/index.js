@@ -14,10 +14,10 @@ function normalizeOptions(options) {
 	const defaultOptions = {
 		basePath: null,
 		entryName: 'app',
-		entryChunkName: 'common',
+		assetsChunkName: '__assets_chunk_name__',
 		extensions: ['.js'],
-		assetExtensions: ['.wxml', '.wxss', '.pug', '.styl', '.scss'],
-		vendorFilename: 'common.js'
+		assetExtensions: ['.wxml', '.wxss', '.pug', '.styl', '.scss', 'less'],
+		vendorFilename: 'vendors.js'
 	};
 
 	const extensions = Array.from(new Set([
@@ -50,32 +50,30 @@ function resolveBasePath(compiler) {
 module.exports = class MiniProgramWebpackPlugin {
 	constructor(options) {
 		this.options = normalizeOptions(options);
+		console.log('options', options);
 		this.appEntries = [];
+		this.pagesEntries = [];
+		this.subpPagesEntries = [];
 	}
 
 	apply(compiler) {
-		// initialization
-		compiler.hooks.afterPlugins.tap(PLUGIN_NAME, this.setBasePath.bind(this));
+		// get pages subpackages tabbarIcons add add entry
 		compiler.hooks.run.tapPromise(PLUGIN_NAME, this.setAppEntries.bind(this));
 		compiler.hooks.watchRun.tapPromise(PLUGIN_NAME, this.setAppEntries.bind(this));
 
 		// dealing with entries
-		compiler.hooks.thisCompilation.tap(PLUGIN_NAME, compilation => {
-			this.applyPlugins(compiler); // split commons chunk
-			this.addEntries(compiler);
-			this.writeJsons(compiler, compilation);
+		compiler.hooks.thisCompilation.tap(PLUGIN_NAME, async compilation => {
+			await this.addEntries(compiler);
+			this.writeJsons(compiler);
+			this.applyPlugins(compiler);
+			this.decorateChunks(compilation);
 		});
 
-		// decorating output to suit WeixinJSBridge runtime
-		compiler.hooks.compilation.tap(PLUGIN_NAME, this.decorateChunks.bind(this));
-
-	}
-
-	setBasePath(compiler) {
-		this.basePath = resolveBasePath.call(this, compiler);
 	}
 
 	async setAppEntries(compiler) {
+		// setBasePath
+		this.basePath = resolveBasePath.call(this, compiler);
 		this.appEntries = await this.resolveAppEntries();
 	}
 
@@ -84,16 +82,17 @@ module.exports = class MiniProgramWebpackPlugin {
 			for (const ext of this.options.extensions) {
 				const fullPath = path.resolve(this.basePath, name + ext);
 				if (fsExtra.existsSync(fullPath)) {
+					// add scripts entry
 					new SingleEntryPlugin(`${this.basePath}/`, `./${name + ext}`, name).apply(compiler);
 				}
 			}
-			const assets = this.options.assetExtensions
-				.map(ext => path.resolve(this.basePath, name + ext))
-				.filter(f => fsExtra.existsSync(f));
+			// add wxml style files
 			new MultiEntryPlugin(
 				this.basePath,
-				assets,
-				this.options.entryChunkName
+				this.options.assetExtensions
+					.map(ext => path.resolve(this.basePath, name + ext))
+					.filter(f => fsExtra.existsSync(f)),
+				this.options.assetsChunkName
 			).apply(compiler);
 		}
 
@@ -102,7 +101,7 @@ module.exports = class MiniProgramWebpackPlugin {
 			new MultiEntryPlugin(
 				this.basePath,
 				tabBarAssets.map(i => path.resolve(this.basePath, i)),
-				this.options.entryChunkName
+				this.options.assetsChunkName
 			).apply(compiler);
 		}
 	}
@@ -120,6 +119,7 @@ module.exports = class MiniProgramWebpackPlugin {
 		return !Array.from(usedFiles).some(moduleName => !reg.test(moduleName));
 	}
 
+	// write json file to page or components dir
 	writeJsons(compiler) {
 		compiler.hooks.emit.tapAsync(PLUGIN_NAME, (compilation, callback) => {
 			const cache = compilation.cache || {};
@@ -190,24 +190,25 @@ module.exports = class MiniProgramWebpackPlugin {
 				chunks: 'all',
 				test: /[\\/]src[\\/]/,
 				minChunks: 2,
-				name: this.options.entryChunkName,
+				name: this.options.vendorFilename,
 				minSize: 0
 			},
 		};
-		for (const {
-			root
-		} of this.subPackages) {
-			let name = root.replace('/', '');
-
-			cacheGroups[`${name}Commons`] = {
-				name: `${root}/${this.options.vendorFilename}`,
-				chunks: 'initial',
-				minSize: 0,
-				minChunks: 1,
-				test: module => this.moduleOnlyUsedBySubPackage(module, root),
-				priority: 3
-			};
-		}
+		//
+		// for (const {
+		// 	root
+		// } of this.subPackages) {
+		// 	let name = root.replace('/', '');
+		//
+		// 	cacheGroups[`${name}Commons`] = {
+		// 		name: `${root}/${this.options.vendorFilename}`,
+		// 		chunks: 'initial',
+		// 		minSize: 0,
+		// 		minChunks: 1,
+		// 		test: module => this.moduleOnlyUsedBySubPackage(module, root),
+		// 		priority: 3
+		// 	};
+		// }
 
 		new SplitChunksPlugin({
 			cacheGroups
@@ -216,7 +217,6 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	decorateChunks(compilation) {
 		const windowRegExp = new RegExp('window', 'g');
-
 		compilation.chunkTemplate.hooks.render.tap(PLUGIN_NAME, (source) => {
 			return new ConcatSource(source.source().replace(windowRegExp, 'wx'));
 		});
@@ -226,7 +226,6 @@ module.exports = class MiniProgramWebpackPlugin {
 			if (chunk.name !== this.options.entryChunkName) {
 				const relativePath = path.relative(path.dirname(path.resolve(this.basePath, chunk.name)), path.resolve(this.basePath, this.options.vendorFilename));
 				const posixPath = relativePath.replace(/\\/g, '/');
-				// eslint-disable-next-line max-len
 				const injectContent = `;require("./${posixPath}");`;
 				source.add(injectContent);
 			}
@@ -234,14 +233,15 @@ module.exports = class MiniProgramWebpackPlugin {
 		});
 	}
 
+	// get app.json
 	async resolveAppEntries() {
-		const minaAppConfig = fsExtra.readJSONSync(path.resolve(this.basePath, 'app.json'));
+		const { tabBar, pages = [], subPackages = [] } = fsExtra.readJSONSync(path.resolve(this.basePath, 'app.json'));
 
-		const pages = minaAppConfig.pages;
+		this.pagesEntries = pages;
 
 		let tabBarAssets = new Set();
-		if (minaAppConfig.tabBar && minaAppConfig.tabBar.list) {
-			minaAppConfig.tabBar.list.forEach(i => {
+		if (tabBar && tabBar.list) {
+			tabBar.list.forEach(i => {
 				if (i.selectedIconPath) {
 					tabBarAssets.add(i.selectedIconPath);
 				}
@@ -249,15 +249,13 @@ module.exports = class MiniProgramWebpackPlugin {
 					tabBarAssets.add(i.iconPath);
 				}
 			});
-			tabBarAssets = tabBarAssets.size ? Array.from(tabBarAssets) : null;
+			tabBarAssets = Array.from(tabBarAssets);
 		}
 
-		this.subPackages = minaAppConfig.subPackages || [];
-
-		if (minaAppConfig.subPackages && minaAppConfig.subPackages.length) {
-			for (const sp of minaAppConfig.subPackages) {
-				for (const spp of sp.pages) {
-					pages.push(path.join(sp.root, spp));
+		if (subPackages && subPackages.length) {
+			for (const subpage of subPackages) {
+				for (const page of subpage.pages) {
+					this.subpPagesEntries.push(path.join(subpage.root, page));
 				}
 			}
 		}
@@ -266,13 +264,13 @@ module.exports = class MiniProgramWebpackPlugin {
 		for (const page of pages) {
 			await this.getComponents(pageComponents, path.resolve(this.basePath, page));
 		}
-		pageComponents = pageComponents.size ? Array.from(pageComponents) : null;
+		pageComponents = Array.from(pageComponents);
 
 		const ret = ['app', ...pages, ...(pageComponents || [])];
 
 		Object.defineProperties(ret, {
 			pages: {
-				get: () => pages
+				get: () => [...this.pagesEntries, ...this.subpPagesEntries]
 			},
 			components: {
 				get: () => pageComponents
@@ -284,16 +282,13 @@ module.exports = class MiniProgramWebpackPlugin {
 		return ret;
 	}
 
+	// get page.json usingComponents path
 	async getComponents(components, instance) {
 		const {
 			usingComponents = {}
-		} = await fsExtra.readJson(`${instance}.json`);
+		} = fsExtra.readJSONSync(`${instance}.json`);
 		const componentBase = path.parse(instance).dir;
 		for (const c of Object.values(usingComponents)) {
-			if (c.indexOf('plugin://') === 0) {
-				continue;
-			}
-
 			const component = path.resolve(componentBase, c);
 			if (!components.has(component)) {
 				components.add(path.relative(this.basePath, component));
@@ -302,7 +297,4 @@ module.exports = class MiniProgramWebpackPlugin {
 		}
 	}
 
-	getFullAssetPath(assetPath) {
-		return path.resolve(this.basePath, assetPath);
-	}
 };
