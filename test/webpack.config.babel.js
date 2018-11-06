@@ -1,14 +1,12 @@
 import path from 'path';
-import MiniProgramWebpackPlugin from '../src';
+import MiniProgramWebpackPlugin from '../lib';
 
 const ext = process.env.TEST_EXT || 'js';
 
 const include = new RegExp('src');
 
 export default {
-	entry: {
-		app: `./src/${ext}/app.${ext}`
-	},
+	entry: [`./src/${ext}/app.json`],
 	output: {
 		filename: '[name].js',
 		path: path.resolve(__dirname, 'dist', ext),
@@ -67,9 +65,7 @@ export default {
 		],
 	},
 	plugins: [
-		new MiniProgramWebpackPlugin({
-			basePath: `src/${ext}`
-		})
+		new MiniProgramWebpackPlugin.plugin()
 	],
 	devtool: 'source-map',
 	resolve: {
