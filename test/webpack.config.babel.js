@@ -10,7 +10,7 @@ export default {
 	output: {
 		filename: '[name].js',
 		path: path.resolve(__dirname, 'dist', ext),
-		// globalObject: 'global',
+		globalObject: 'global',
 	},
 	// optimization: {
 	// 	splitChunks: {
