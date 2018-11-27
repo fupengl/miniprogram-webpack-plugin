@@ -1,20 +1,41 @@
 
-import path from 'path';
-import MiniProgramWebpackPlugin, { Targets } from '../src';
+const path = require('path');
+const MiniProgramWebpackPlugin = require('../src');
 
 const ext = process.env.TEST_EXT || 'js';
 
 const include = new RegExp('src');
 
-export default {
+module.exports = {
 	entry: {
-		app: [`./src/${ext}/utils/bomPolyfill.js`, `./src/${ext}/app.${ext}`],
+		app: `./src/${ext}/app.${ext}`,
 	},
 	output: {
 		filename: '[name].js',
 		path: path.resolve(__dirname, 'dist', ext),
 	},
-	target: Targets.Wechat,
+	optimization: {
+		splitChunks: {
+			cacheGroups: {
+				default: false,
+				//node_modules
+				vendor: {
+					chunks: 'all',
+					test: /[\\/]node_modules[\\/]/,
+					name: 'vendors',
+					minChunks: 1
+				},
+				//其他公用代码
+				common: {
+					chunks: 'all',
+					test: /[\\/]src[\\/]/,
+					minChunks: 1,
+					name: 'commons',
+					minSize: 0
+				}
+			}
+		}
+	},
 	module: {
 		rules: [
 			{
@@ -22,17 +43,16 @@ export default {
 				include,
 				loader: 'babel-loader',
 				options: {
-					presets: ['es2015', 'stage-0'],
+					presets: ['@babel/preset-env'],
 					babelrc: false,
 				}
 			},
 			{
-				test: /\.(wxss|wxml|json|png|wxs)$/,
+				test: /\.(woff|woff2|eot|ttf|svg|png|gif|jpeg|jpg)\??.*$/,
+				loader: 'url-loader',
 				include,
-				loader: 'file-loader',
-				options: {
-					useRelativePath: true,
-					name: '[name].[ext]',
+				query: {
+					limit: 50000
 				}
 			},
 		],
