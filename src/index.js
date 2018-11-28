@@ -30,7 +30,13 @@ module.exports = class MiniProgramWebpackPlugin {
 			compilation.chunkTemplate.hooks.render.tap(pluginName, (modules, chunk) => {
 				if (chunk.name === 'app') {
 					const source = new ConcatSource(modules);
-					source.add(`;require('./runtime');require('./vendors');require('commons')`);
+					source.add(`;require('./runtime');require('commons')`);
+					if (modules.source().includes('./commons')) {
+						source.add(`;require('commons')`);
+					}
+					if (modules.source().includes('vendors')) {
+						source.add(`;require('./vendors')`);
+					}
 					return source;
 				}
 				return modules;
@@ -46,8 +52,8 @@ module.exports = class MiniProgramWebpackPlugin {
 			}
 		});
 
-		compiler.hooks.done.tap(pluginName, stats => {
-			console.log('build success :', stats);
+		compiler.hooks.done.tap(pluginName, () => {
+			console.log('build success');
 		});
 	}
 
