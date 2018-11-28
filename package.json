@@ -5,9 +5,9 @@
   "scripts": {
     "start": "jest test --watch",
     "test": "jest test",
-    "test:webpack": "cd test && webpack --mode=development",
-    "test:webpack:ts": "cd test && TEST_EXT=ts webpack",
-    "lint":"eslint --ext .js src/ --fix",
+    "test:webpack": "cd test && webpack --mode=development --progress",
+    "test:webpack:ts": "cd test && TEST_EXT=ts webpack --progress",
+    "lint": "eslint --ext .js src/ --fix",
     "prebuild": "rimraf ./lib && mkdirp ./lib",
     "build:watch": "babel src -o lib/index.js -w",
     "build": "npx babel src --out-dir lib",
@@ -63,8 +63,8 @@
     "url-loader": "^1.1.2"
   },
   "dependencies": {
-    "copy-webpack-plugin": "^4.6.0",
     "fs-extra": "^7.0.1",
+    "globby": "^8.0.1",
     "webpack": "^4.26.1",
     "webpack-cli": "^3.1.2",
     "webpack-sources": "^1.3.0"

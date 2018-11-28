@@ -26,7 +26,7 @@ module.exports = {
 				}
 			},
 			{
-				test: /\.(woff|woff2|eot|ttf|svg|png|gif|jpeg|jpg|wxss|wxml|json|wxs)\??.*$/,
+				test: /\.(woff|woff2|eot|ttf|svg|png|gif|jpeg|jpg|wxss|wxml|wxs)\??.*$/,
 				loader: 'url-loader',
 				include,
 				query: {
