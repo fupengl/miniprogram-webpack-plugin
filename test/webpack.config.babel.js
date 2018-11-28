@@ -14,28 +14,6 @@ module.exports = {
 		filename: '[name].js',
 		path: path.resolve(__dirname, 'dist', ext)
 	},
-	// optimization: {
-	// 	splitChunks: {
-	// 		cacheGroups: {
-	// 			default: false,
-	// 			//node_modules
-	// 			vendor: {
-	// 				chunks: 'all',
-	// 				test: /[\\/]node_modules[\\/]/,
-	// 				name: 'vendors',
-	// 				minChunks: 1
-	// 			},
-	// 			//其他公用代码
-	// 			common: {
-	// 				chunks: 'all',
-	// 				test: /[\\/]src[\\/]/,
-	// 				minChunks: 1,
-	// 				name: 'commons',
-	// 				minSize: 0
-	// 			}
-	// 		}
-	// 	}
-	// },
 	module: {
 		rules: [
 			{
@@ -58,9 +36,7 @@ module.exports = {
 		],
 	},
 	plugins: [
-		new MiniProgramWebpackPlugin({
-			extensions: [`.${ext}`, '.js'],
-		})
+		new MiniProgramWebpackPlugin()
 	],
 	devtool: 'source-map',
 	resolve: {

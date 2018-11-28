@@ -1,4 +1,3 @@
-
 import { formatTime } from '../../utils/util';
 
 Page({
@@ -7,7 +6,7 @@ Page({
 		userInfo: {},
 	},
 	onLoad() {
-		console.log(formatTime(new Date()))
+		console.log(formatTime(new Date()));
 	},
 	bindViewTap() {
 		wx.navigateTo({
@@ -18,7 +17,5 @@ Page({
 		wx.navigateTo({
 			url: '../../subPackages/product/productList',
 		});
-	},
-	onLoad() {
-	},
+	}
 });

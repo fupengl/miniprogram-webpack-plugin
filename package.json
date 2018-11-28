@@ -11,7 +11,7 @@
     "prebuild": "rimraf ./lib && mkdirp ./lib",
     "build:watch": "babel src -o lib/index.js -w",
     "build": "npx babel src --out-dir lib",
-    "preversion": "yarn test && yarn build"
+    "preversion": "npm test && npm build"
   },
   "main": "lib/index.js",
   "files": [
