@@ -1,15 +1,15 @@
-const path = require('path')
-const fsExtra = require('fs-extra')
-const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin')
-const MultiEntryPlugin = require('webpack/lib/MultiEntryPlugin')
-const LoaderTargetPlugin = require('webpack/lib/LoaderTargetPlugin')
-const FunctionModulePlugin = require('webpack/lib/FunctionModulePlugin')
+const path = require('path');
+const fsExtra = require('fs-extra');
+const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin');
+const MultiEntryPlugin = require('webpack/lib/MultiEntryPlugin');
+const LoaderTargetPlugin = require('webpack/lib/LoaderTargetPlugin');
+const FunctionModulePlugin = require('webpack/lib/FunctionModulePlugin');
 const NodeSourcePlugin = require('webpack/lib/node/NodeSourcePlugin');
-const JsonpTemplatePlugin = require('webpack/lib/web/JsonpTemplatePlugin')
-const CopyWebpackPlugin = require('copy-webpack-plugin')
-const { ConcatSource } = require('webpack-sources')
+const JsonpTemplatePlugin = require('webpack/lib/web/JsonpTemplatePlugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+const { ConcatSource } = require('webpack-sources');
 
-const pluginName = "MiniProgramWebpackPlugin"
+const pluginName = 'MiniProgramWebpackPlugin';
 module.exports = class MiniProgramWebpackPlugin {
 
 	constructor(options = {}) {
@@ -17,43 +17,43 @@ module.exports = class MiniProgramWebpackPlugin {
 			clear: true,
 			extensions: ['.js', '.ts'],
 			assetsChunkName: '__assets_chunk_name__'
-		}, options)
+		}, options);
 	}
 
 	apply(compiler) {
-		this.enforceTarget(compiler)
+		this.enforceTarget(compiler);
 
-		compiler.hooks.run.tapPromise(pluginName, this.setAppEntries.bind(this))
-		compiler.hooks.watchRun.tapPromise(pluginName, this.setAppEntries.bind(this))
+		compiler.hooks.run.tapPromise(pluginName, this.setAppEntries.bind(this));
+		compiler.hooks.watchRun.tapPromise(pluginName, this.setAppEntries.bind(this));
 
 		compiler.hooks.compilation.tap(pluginName, compilation => {
 			compilation.chunkTemplate.hooks.render.tap(pluginName, (modules, chunk) => {
 				if (chunk.name === 'app') {
-					const source = new ConcatSource(modules)
-					source.add(`;require('./runtime');require('./vendors');require('commons')`)
-					return source
+					const source = new ConcatSource(modules);
+					source.add(`;require('./runtime');require('./vendors');require('commons')`);
+					return source;
 				}
-				return modules
-			})
-		})
+				return modules;
+			});
+		});
 
-		let firstInit = true
+		let firstInit = true;
 		compiler.hooks.emit.tapPromise(pluginName, async compilation => {
-			const { clear } = this.options
+			const { clear } = this.options;
 			if (clear && firstInit) {
-				firstInit = false
-				await this.clearOutPut(compilation)
+				firstInit = false;
+				await this.clearOutPut(compilation);
 			}
-		})
+		});
 
 		compiler.hooks.done.tap(pluginName, stats => {
-			console.log('build success');
+			console.log('build success :', stats);
 		});
 	}
 
 	async enforceTarget(compiler) {
 		const { options } = compiler;
-		options.optimization.runtimeChunk = { name: "runtime" }
+		options.optimization.runtimeChunk = { name: 'runtime' };
 		options.optimization.splitChunks.cacheGroups = {
 			default: false,
 			//node_modules
@@ -71,21 +71,21 @@ module.exports = class MiniProgramWebpackPlugin {
 				name: 'commons',
 				minSize: 0
 			}
-		}
+		};
 		// set jsonp obj motuned obj
-		options.output.globalObject = 'global'
+		options.output.globalObject = 'global';
 
 		if (!options.node || options.node.global) {
 			options.node = options.node || {};
 			options.node.global = false;
 		}
 		// set target to web
-		// options.target = compiler => {
-		// 	new JsonpTemplatePlugin(options.output).apply(compiler)
-		// 	new FunctionModulePlugin(options.output).apply(compiler)
-		// 	new NodeSourcePlugin(options.node).apply(compiler)
-		// 	new LoaderTargetPlugin('web').apply(compiler)
-		// };
+		options.target = compiler => {
+			new JsonpTemplatePlugin(options.output).apply(compiler);
+			new FunctionModulePlugin(options.output).apply(compiler);
+			new NodeSourcePlugin(options.node).apply(compiler);
+			new LoaderTargetPlugin('web').apply(compiler);
+		};
 	}
 
 	async setAppEntries(compiler) {
@@ -93,18 +93,10 @@ module.exports = class MiniProgramWebpackPlugin {
 		if (!appEntry) {
 			throw new TypeError('Entry invalid.');
 		}
-		this.basePath = path.resolve(path.dirname(appEntry))
+		this.basePath = path.resolve(path.dirname(appEntry));
 		this.appEntries = await this.resolveAppEntries();
-		this.appEntries
-			.filter(resource => resource !== 'app')
-			.forEach(resource => {
-				const fullPath = this.getFullScriptPath(resource);
-				this.addScriptEntry(compiler, fullPath, resource);
-			});
-
-		new CopyWebpackPlugin([{ from: this.basePath, to: compiler.options.output.path }], {
-			ignore: this.options.extensions
-		}).apply(compiler)
+		this.addScriptEntry(compiler);
+		this.copyAssets(compiler);
 	}
 
 	// resolve tabbar page compoments
@@ -117,7 +109,7 @@ module.exports = class MiniProgramWebpackPlugin {
 		// parse subpage
 		for (const subPage of subPackages) {
 			for (const page of (subPage.pages || [])) {
-				pages.push(path.join(subPage.root, page))
+				pages.push(path.join(subPage.root, page));
 			}
 		}
 
@@ -126,8 +118,8 @@ module.exports = class MiniProgramWebpackPlugin {
 			await this.getComponents(components, path.resolve(this.basePath, page));
 		}
 
-		components = Array.from(components) || []
-		tabBarAssets = Array.from(tabBarAssets) || []
+		components = Array.from(components) || [];
+		tabBarAssets = Array.from(tabBarAssets) || [];
 
 		const ret = ['app', ...pages, ...components];
 		Object.defineProperties(ret, {
@@ -145,16 +137,21 @@ module.exports = class MiniProgramWebpackPlugin {
 	}
 
 	// add entry
-	addScriptEntry(compiler, entry, name) {
+	addScriptEntry(compiler) {
 		compiler.hooks.make.tap(pluginName, compilation => {
-			const dep = SingleEntryPlugin.createDependency(entry, name);
-			compilation.addEntry(this.base, dep, name, () => { });
-		})
+			this.appEntries
+				.filter(resource => resource !== 'app')
+				.forEach(resource => {
+					const fullPath = this.getFullScriptPath(resource);
+					const dep = SingleEntryPlugin.createDependency(fullPath, resource);
+					compilation.addEntry(this.base, dep, resource, () => { });
+				});
+		});
 	}
 
 	// add assets entry
 	addEntries(compiler, entries, chunkName) {
-		new MultiEntryPlugin(this.base, entries, chunkName).apply(compiler)
+		new MultiEntryPlugin(this.base, entries, chunkName).apply(compiler);
 	}
 
 	// parse components
@@ -186,8 +183,14 @@ module.exports = class MiniProgramWebpackPlugin {
 		}
 	}
 
+	copyAssets(compiler) {
+		new CopyWebpackPlugin([{ from: this.basePath, to: compiler.options.output.path }], {
+			ignore: this.options.extensions
+		}).apply(compiler);
+	}
+
 	async clearOutPut(compilation) {
 		const { path } = compilation.options.output;
-		return await fsExtra.remove(path);
+		await fsExtra.remove(path);
 	}
-}
+};

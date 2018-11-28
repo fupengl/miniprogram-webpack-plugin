@@ -35,7 +35,7 @@
             "named": "never"
         }],
         "max-len": [1, {
-            "code": 80,
+            "code": 120,
             "tabWidth": 2,
             "ignoreComments": true,
             "ignoreStrings": true,
