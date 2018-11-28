@@ -4,7 +4,7 @@ import { formatTime } from 'utils/util';
 App({
 	onLaunch() {
 
-		flow(() => console.log('typeof formatTime', typeof formatTime))();
+		console.log(formatTime(new Date()))
 
 		//调用API从本地缓存中获取数据
 		var logs = wx.getStorageSync('logs') || [];

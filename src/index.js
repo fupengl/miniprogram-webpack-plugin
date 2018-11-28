@@ -80,12 +80,12 @@ module.exports = class MiniProgramWebpackPlugin {
 			options.node.global = false;
 		}
 		// set target to web
-		options.target = compiler => {
-			new JsonpTemplatePlugin(options.output).apply(compiler)
-			new FunctionModulePlugin(options.output).apply(compiler)
-			new NodeSourcePlugin(options.node).apply(compiler)
-			new LoaderTargetPlugin('web').apply(compiler)
-		};
+		// options.target = compiler => {
+		// 	new JsonpTemplatePlugin(options.output).apply(compiler)
+		// 	new FunctionModulePlugin(options.output).apply(compiler)
+		// 	new NodeSourcePlugin(options.node).apply(compiler)
+		// 	new LoaderTargetPlugin('web').apply(compiler)
+		// };
 	}
 
 	async setAppEntries(compiler) {
