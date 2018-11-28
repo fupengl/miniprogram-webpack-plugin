@@ -1,9 +1,13 @@
 const path = require('path')
 const fsExtra = require('fs-extra')
 const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin')
+const MultiEntryPlugin = require('webpack/lib/MultiEntryPlugin')
 const LoaderTargetPlugin = require('webpack/lib/LoaderTargetPlugin')
 const FunctionModulePlugin = require('webpack/lib/FunctionModulePlugin')
+const NodeSourcePlugin = require('webpack/lib/node/NodeSourcePlugin');
+const JsonpTemplatePlugin = require('webpack/lib/web/JsonpTemplatePlugin')
 const CopyWebpackPlugin = require('copy-webpack-plugin')
+const { ConcatSource } = require('webpack-sources')
 
 const pluginName = "MiniProgramWebpackPlugin"
 module.exports = class MiniProgramWebpackPlugin {
@@ -12,17 +16,28 @@ module.exports = class MiniProgramWebpackPlugin {
 		this.options = Object.assign({}, {
 			clear: true,
 			extensions: ['.js', '.ts'],
+			assetsChunkName: '__assets_chunk_name__'
 		}, options)
 	}
 
 	apply(compiler) {
-		let firstInit = true
-
 		this.enforceTarget(compiler)
 
 		compiler.hooks.run.tapPromise(pluginName, this.setAppEntries.bind(this))
 		compiler.hooks.watchRun.tapPromise(pluginName, this.setAppEntries.bind(this))
 
+		compiler.hooks.compilation.tap(pluginName, compilation => {
+			compilation.chunkTemplate.hooks.render.tap(pluginName, (modules, chunk) => {
+				if (chunk.name === 'app') {
+					const source = new ConcatSource(modules)
+					source.add(`;require('./runtime');require('./vendors');require('commons')`)
+					return source
+				}
+				return modules
+			})
+		})
+
+		let firstInit = true
 		compiler.hooks.emit.tapPromise(pluginName, async compilation => {
 			const { clear } = this.options
 			if (clear && firstInit) {
@@ -46,7 +61,7 @@ module.exports = class MiniProgramWebpackPlugin {
 				chunks: 'all',
 				test: /[\\/]node_modules[\\/]/,
 				name: 'vendors',
-				minChunks: 2
+				minChunks: 0
 			},
 			//其他公用代码
 			common: {
@@ -57,10 +72,18 @@ module.exports = class MiniProgramWebpackPlugin {
 				minSize: 0
 			}
 		}
-		options.node = options.node || {};
-		options.node.global = false;
+		// set jsonp obj motuned obj
+		options.output.globalObject = 'global'
+
+		if (!options.node || options.node.global) {
+			options.node = options.node || {};
+			options.node.global = false;
+		}
+		// set target to web
 		options.target = compiler => {
-			new FunctionModulePlugin().apply(compiler)
+			new JsonpTemplatePlugin(options.output).apply(compiler)
+			new FunctionModulePlugin(options.output).apply(compiler)
+			new NodeSourcePlugin(options.node).apply(compiler)
 			new LoaderTargetPlugin('web').apply(compiler)
 		};
 	}
@@ -78,11 +101,15 @@ module.exports = class MiniProgramWebpackPlugin {
 				const fullPath = this.getFullScriptPath(resource);
 				this.addScriptEntry(compiler, fullPath, resource);
 			});
+
+		new CopyWebpackPlugin([{ from: this.basePath, to: compiler.options.output.path }], {
+			ignore: this.options.extensions
+		}).apply(compiler)
 	}
 
 	// resolve tabbar page compoments
 	async resolveAppEntries() {
-		const { tabBar, pages = [], subPackages = [] } = fsExtra.readJSONSync(path.resolve(this.basePath, 'app.json'));
+		const { pages = [], subPackages = [] } = fsExtra.readJSONSync(path.resolve(this.basePath, 'app.json'));
 
 		let tabBarAssets = new Set();
 		let components = new Set();
@@ -123,6 +150,11 @@ module.exports = class MiniProgramWebpackPlugin {
 			const dep = SingleEntryPlugin.createDependency(entry, name);
 			compilation.addEntry(this.base, dep, name, () => { });
 		})
+	}
+
+	// add assets entry
+	addEntries(compiler, entries, chunkName) {
+		new MultiEntryPlugin(this.base, entries, chunkName).apply(compiler)
 	}
 
 	// parse components

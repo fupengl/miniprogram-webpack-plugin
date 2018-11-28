@@ -48,7 +48,7 @@ module.exports = {
 				}
 			},
 			{
-				test: /\.(woff|woff2|eot|ttf|svg|png|gif|jpeg|jpg)\??.*$/,
+				test: /\.(woff|woff2|eot|ttf|svg|png|gif|jpeg|jpg|wxss|wxml|json|wxs)\??.*$/,
 				loader: 'url-loader',
 				include,
 				query: {
@@ -60,7 +60,7 @@ module.exports = {
 	plugins: [
 		new MiniProgramWebpackPlugin({
 			extensions: [`.${ext}`, '.js'],
-		}),
+		})
 	],
 	devtool: 'source-map',
 	resolve: {
