@@ -1,8 +1,9 @@
 const path = require('path')
-const fsExtra = require('fs-extra');
+const fsExtra = require('fs-extra')
 const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin')
-const SplitChunksPlugin = require('webpack/lib/optimize/SplitChunksPlugin')
-const RuntimeChunkPlugin = require("webpack/lib/optimize/RuntimeChunkPlugin");
+const LoaderTargetPlugin = require('webpack/lib/LoaderTargetPlugin')
+const FunctionModulePlugin = require('webpack/lib/FunctionModulePlugin')
+const CopyWebpackPlugin = require('copy-webpack-plugin')
 
 const pluginName = "MiniProgramWebpackPlugin"
 module.exports = class MiniProgramWebpackPlugin {
@@ -16,6 +17,8 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	apply(compiler) {
 		let firstInit = true
+
+		this.enforceTarget(compiler)
 
 		compiler.hooks.run.tapPromise(pluginName, this.setAppEntries.bind(this))
 		compiler.hooks.watchRun.tapPromise(pluginName, this.setAppEntries.bind(this))
@@ -33,6 +36,35 @@ module.exports = class MiniProgramWebpackPlugin {
 		});
 	}
 
+	async enforceTarget(compiler) {
+		const { options } = compiler;
+		options.optimization.runtimeChunk = { name: "runtime" }
+		options.optimization.splitChunks.cacheGroups = {
+			default: false,
+			//node_modules
+			vendor: {
+				chunks: 'all',
+				test: /[\\/]node_modules[\\/]/,
+				name: 'vendors',
+				minChunks: 2
+			},
+			//其他公用代码
+			common: {
+				chunks: 'all',
+				test: /[\\/]src[\\/]/,
+				minChunks: 2,
+				name: 'commons',
+				minSize: 0
+			}
+		}
+		options.node = options.node || {};
+		options.node.global = false;
+		options.target = compiler => {
+			new FunctionModulePlugin().apply(compiler)
+			new LoaderTargetPlugin('web').apply(compiler)
+		};
+	}
+
 	async setAppEntries(compiler) {
 		const appEntry = compiler.options.entry.app;
 		if (!appEntry) {
@@ -46,32 +78,6 @@ module.exports = class MiniProgramWebpackPlugin {
 				const fullPath = this.getFullScriptPath(resource);
 				this.addScriptEntry(compiler, fullPath, resource);
 			});
-		this.applySpliteChunk(compiler)
-	}
-
-	async applySpliteChunk(compiler) {
-		new SplitChunksPlugin({
-			cacheGroups: {
-				default: false,
-				//node_modules
-				vendor: {
-					chunks: 'all',
-					test: /[\\/]node_modules[\\/]/,
-					name: 'vendors',
-					minChunks: 1
-				},
-				//其他公用代码
-				common: {
-					chunks: 'all',
-					test: /[\\/]src[\\/]/,
-					minChunks: 1,
-					name: 'commons',
-					minSize: 0
-				}
-			}
-		}).apply(compiler)
-
-		new RuntimeChunkPlugin({ name: "runtime" }).apply(compiler)
 	}
 
 	// resolve tabbar page compoments
