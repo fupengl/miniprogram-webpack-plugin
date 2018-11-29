@@ -44,13 +44,14 @@ module.exports = class MiniProgramWebpackPlugin {
 		compiler.hooks.done.tap(pluginName, () => {
 			console.log('build success');
 		});
+
 	}
 
 	compilationHooks(compilation) {
 		compilation.chunkTemplate.hooks.render.tap(pluginName, (modules, chunk) => {
 			if (chunk.name === 'app') {
 				const source = new ConcatSource(modules);
-				source.add(`;require('./runtime');require('commons')`);
+				source.add(`;require('./runtime')`);
 				if (modules.source().includes('./commons')) {
 					source.add(`;require('commons')`);
 				}
@@ -116,18 +117,18 @@ module.exports = class MiniProgramWebpackPlugin {
 		}
 		this.basePath = path.resolve(path.dirname(appEntry));
 		this.appEntries = await this.resolveAppEntries();
-		await this.addAssetsEntries(compiler);
-		await this.addScriptEntry(compiler);
+		this.addAssetsEntries(compiler);
+		this.addScriptEntry(compiler);
 	}
 
 	// resolve tabbar page compoments
 	async resolveAppEntries() {
-		const { tabBar: { list = [] }, pages = [], subPackages = [] } = fsExtra.readJSONSync(path.resolve(this.basePath, 'app.json'));
+		const { tabBar = {}, pages = [], subPackages = [] } = fsExtra.readJSONSync(path.resolve(this.basePath, 'app.json'));
 
 		let tabBarAssets = new Set();
 		let components = new Set();
 
-		for (const { iconPath, selectedIconPath } of list) {
+		for (const { iconPath, selectedIconPath } of (tabBar.list || [])) {
 			if (iconPath) {
 				tabBarAssets.add(iconPath);
 			}
@@ -191,7 +192,7 @@ module.exports = class MiniProgramWebpackPlugin {
 			dot: false
 		});
 		entries.push(...this.appEntries.tabBarAssets);
-		this.assetsEntry = entries;
+		this.assetsEntry = entries || [];
 		new MultiEntryPlugin(this.basePath, entries, assetsChunkName).apply(compiler);
 	}
 
@@ -211,20 +212,20 @@ module.exports = class MiniProgramWebpackPlugin {
 	}
 
 	async emitAssetsFile(compilation) {
-		const emitIcons = [];
-		this.assetsEntry.forEach(entry => {
-			const iconSrc = path.resolve(this.basePath, entry);
+		const emitAssets = [];
+		for (let entry of this.assetsEntry) {
+			const assets = path.resolve(this.basePath, entry);
 			const toTmit = async () => {
-				const iconStat = await fsExtra.stat(iconSrc);
-				const iconSource = await fsExtra.readFile(iconSrc);
+				const stat = await fsExtra.stat(assets);
+				const source = await fsExtra.readFile(assets);
 				compilation.assets[entry] = {
-					size: () => iconStat.size,
-					source: () => iconSource
+					size: () => stat.size,
+					source: () => source
 				};
 			};
-			emitIcons.push(toTmit());
-		});
-		await Promise.all(emitIcons);
+			emitAssets.push(toTmit());
+		}
+		await Promise.all(emitAssets);
 	}
 
 	// script full path
@@ -240,7 +241,6 @@ module.exports = class MiniProgramWebpackPlugin {
 			}
 		}
 	}
-
 
 	static async clearOutPut(compilation) {
 		const { path } = compilation.options.output;

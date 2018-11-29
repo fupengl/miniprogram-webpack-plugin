@@ -41,6 +41,6 @@ module.exports = {
 	devtool: 'source-map',
 	resolve: {
 		modules: [`src/${ext}`, 'node_modules'],
-		extensions: ['.js', '.ts', '.json'],
+		extensions: ['.js', '.ts'],
 	},
 };
