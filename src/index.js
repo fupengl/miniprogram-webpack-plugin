@@ -215,6 +215,9 @@ module.exports = class MiniProgramWebpackPlugin {
 		const emitAssets = [];
 		for (let entry of this.assetsEntry) {
 			const assets = path.resolve(this.basePath, entry);
+			if (/\.(sass|scss|css|less|styl)$/.test(assets)) {
+				continue;
+			}
 			const toTmit = async () => {
 				const stat = await fsExtra.stat(assets);
 				const source = await fsExtra.readFile(assets);
