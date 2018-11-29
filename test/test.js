@@ -15,8 +15,7 @@ const createTest = function createTest(ext) {
 			},
 		});
 		stdout && console.log(stdout);
-	}
-	catch (err) {
+	} catch (err) {
 		err.stdout && console.error(err.stdout);
 		expect(err).toBe(undefined);
 	}
@@ -43,7 +42,7 @@ const createTest = function createTest(ext) {
 afterEach(() => {
 	rimraf.sync(resolve('test/dist'));
 	delete global.wx;
-	delete global.getApp;
+	delete global.getApp;q
 	delete global.App;
 	delete global.Page;
 });
