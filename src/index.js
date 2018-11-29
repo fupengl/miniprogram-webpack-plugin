@@ -123,7 +123,7 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	// resolve tabbar page compoments
 	async resolveAppEntries() {
-		const { tabBar = {}, pages = [], subPackages = [] } = fsExtra.readJSONSync(path.resolve(this.basePath, 'app.json'));
+		const { tabBar = {}, pages = [], subpackages = [] } = fsExtra.readJSONSync(path.resolve(this.basePath, 'app.json'));
 
 		let tabBarAssets = new Set();
 		let components = new Set();
@@ -138,7 +138,7 @@ module.exports = class MiniProgramWebpackPlugin {
 		}
 
 		// parse subpage
-		for (const subPage of subPackages) {
+		for (const subPage of subpackages) {
 			for (const page of (subPage.pages || [])) {
 				pages.push(path.join(subPage.root, page));
 			}
