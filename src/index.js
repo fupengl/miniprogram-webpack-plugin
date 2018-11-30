@@ -62,7 +62,7 @@ module.exports = class MiniProgramWebpackPlugin {
 			}
 			return modules;
 		});
-		// splice empty module
+		// splice assets module
 		compilation.hooks.beforeChunkAssets.tap(pluginName, () => {
 			const assetsChunkIndex = compilation.chunks.findIndex(
 				({ name }) => name === this.options.assetsChunkName
@@ -115,10 +115,14 @@ module.exports = class MiniProgramWebpackPlugin {
 		if (!appEntry) {
 			throw new TypeError('Entry invalid.');
 		}
-		this.basePath = path.resolve(path.dirname(appEntry));
-		this.appEntries = await this.resolveAppEntries();
-		this.addAssetsEntries(compiler);
-		this.addScriptEntry(compiler);
+		try {
+			this.basePath = path.resolve(path.dirname(appEntry));
+			this.appEntries = await this.resolveAppEntries();
+			await this.addAssetsEntries(compiler);
+			await this.addScriptEntry(compiler);
+		} catch (error) {
+			console.log(error);
+		}
 	}
 
 	// resolve tabbar page compoments
@@ -169,15 +173,12 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	// add script entry
 	async addScriptEntry(compiler) {
-		compiler.hooks.make.tap(pluginName, compilation => {
-			this.appEntries
-				.filter(resource => resource !== 'app')
-				.forEach(resource => {
-					const fullPath = this.getFullScriptPath(resource);
-					const dep = SingleEntryPlugin.createDependency(fullPath, resource);
-					compilation.addEntry(this.base, dep, resource, () => { });
-				});
-		});
+		this.appEntries
+			.filter(resource => resource !== 'app')
+			.forEach(resource => {
+				const fullPath = this.getFullScriptPath(resource);
+				new SingleEntryPlugin(this.basePath, fullPath, resource).apply(compiler);
+			});
 	}
 
 	// add assets entry

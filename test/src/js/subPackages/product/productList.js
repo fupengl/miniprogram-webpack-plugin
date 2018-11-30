@@ -3,7 +3,7 @@ import Product from './product.service';
 console.log(Product, '!!!!!!!');
 const productService = new Product();
 
-require('./images/test.png')
+require('./images/test.png');
 
 Page({
 	data: {
