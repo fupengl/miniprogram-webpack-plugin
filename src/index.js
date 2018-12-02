@@ -49,14 +49,17 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	compilationHooks(compilation) {
 		compilation.chunkTemplate.hooks.render.tap(pluginName, (modules, chunk) => {
-			if (chunk.name === 'app') {
+			if (this.appEntries.includes(chunk.name)) {
 				const source = new ConcatSource(modules);
-				source.add(`;require('./runtime')`);
-				if (modules.source().includes('./commons')) {
-					source.add(`;require('commons')`);
+				const relativeRuntime = path.relative(path.dirname(chunk.name), './runtime');
+				const relativeCommon = path.relative(path.dirname(chunk.name), './commons');
+				const relativeVendors = path.relative(path.dirname(chunk.name), './vendors');
+				source.add(`;require("${relativeRuntime}")`);
+				if (modules.source().includes('commons')) {
+					source.add(`;require("${relativeCommon}")`);
 				}
 				if (modules.source().includes('vendors')) {
-					source.add(`;require('./vendors')`);
+					source.add(`;require("${relativeVendors}")`);
 				}
 				return source;
 			}
