@@ -50,15 +50,17 @@ module.exports = class MiniProgramWebpackPlugin {
 	compilationHooks(compilation) {
 		compilation.chunkTemplate.hooks.render.tap(pluginName, (modules, chunk) => {
 			if (this.appEntries.includes(chunk.name)) {
+				const requireModules = modules.listMap().children[Object.keys(modules.listMap().children).pop()].generatedCode.split(',');
 				const source = new ConcatSource(modules);
 				const relativeRuntime = path.relative(path.dirname(chunk.name), './runtime');
 				const relativeCommon = path.relative(path.dirname(chunk.name), './commons');
 				const relativeVendors = path.relative(path.dirname(chunk.name), './vendors');
+				// to rewrite ===3 require commomjs ===4 require ventdors.js
 				source.add(`;require("${relativeRuntime}")`);
-				if (modules.source().includes('commons')) {
+				if (requireModules.length >= 3) {
 					source.add(`;require("${relativeCommon}")`);
 				}
-				if (modules.source().includes('vendors')) {
+				if (requireModules.length >= 4) {
 					source.add(`;require("${relativeVendors}")`);
 				}
 				return source;
