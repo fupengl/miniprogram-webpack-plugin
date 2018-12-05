@@ -52,9 +52,9 @@ module.exports = class MiniProgramWebpackPlugin {
 			if (this.appEntries.includes(chunk.name)) {
 				const requireModules = modules.listMap().children[Object.keys(modules.listMap().children).pop()].generatedCode.split(',');
 				const source = new ConcatSource(modules);
-				const relativeRuntime = path.relative(path.dirname(chunk.name), './runtime');
-				const relativeCommon = path.relative(path.dirname(chunk.name), './commons');
-				const relativeVendors = path.relative(path.dirname(chunk.name), './vendors');
+				const relativeRuntime = path.relative(path.dirname(chunk.name), './runtime').replace(/\\/g, '/');
+				const relativeCommon = path.relative(path.dirname(chunk.name), './commons').replace(/\\/g, '/');
+				const relativeVendors = path.relative(path.dirname(chunk.name), './vendors').replace(/\\/g, '/');
 				// to rewrite ===4 require commomjs ===5 require ventdors.js
 				source.add(`;require("${relativeRuntime}")`);
 				if (requireModules.length >= 4) {
