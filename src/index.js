@@ -41,10 +41,6 @@ module.exports = class MiniProgramWebpackPlugin {
 			await this.emitAssetsFile(compilation);
 		});
 
-		compiler.hooks.done.tap(pluginName, () => {
-			console.log('build success');
-		});
-
 	}
 
 	compilationHooks(compilation) {
@@ -209,10 +205,13 @@ module.exports = class MiniProgramWebpackPlugin {
 		} = fsExtra.readJSONSync(`${instance}.json`);
 		const componentBase = path.parse(instance).dir;
 		for (const c of Object.values(usingComponents)) {
-			const component = path.resolve(componentBase, c);
-			if (!components.has(component) && c.indexOf('plugin://') !== 0) {
-				components.add(path.relative(this.basePath, component));
-				await this.getComponents(components, component);
+			console.log(c);
+			if (c.indexOf('plugin://') !== 0 && c[0] === '.') {
+				const component = path.resolve(componentBase, c);
+				if (!components.has(component) && c.indexOf('plugin://') !== 0) {
+					components.add(path.relative(this.basePath, component));
+					await this.getComponents(components, component);
+				}
 			}
 		}
 	}
