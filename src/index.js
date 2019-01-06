@@ -26,19 +26,36 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		this.enforceTarget(compiler);
 
-		compiler.hooks.run.tapPromise(pluginName, this.setAppEntries.bind(this));
-		compiler.hooks.watchRun.tapPromise(pluginName, this.setAppEntries.bind(this));
+		const catchError = handler => async arg => {
+			try {
+				await handler(arg);
+			} catch (err) {
+				console.warn(err);
+			}
+		};
+
+		compiler.hooks.run.tapPromise(pluginName, catchError(async compiler => {
+			await this.setAppEntries(compiler);
+		}));
+
+		compiler.hooks.watchRun.tapPromise(pluginName, catchError(async compiler => {
+			await this.setAppEntries(compiler);
+		}));
 
 		compiler.hooks.compilation.tap(pluginName, this.compilationHooks.bind(this));
 
 		let firstInit = true;
 		compiler.hooks.emit.tapPromise(pluginName, async compilation => {
-			const { clear } = this.options;
-			if (clear && firstInit) {
-				firstInit = false;
-				await MiniProgramWebpackPlugin.clearOutPut(compilation);
+			try {
+				const { clear } = this.options;
+				if (clear && firstInit) {
+					firstInit = false;
+					await MiniProgramWebpackPlugin.clearOutPut(compilation);
+				}
+				await this.emitAssetsFile(compilation);
+			} catch (error) {
+				console.warn(error);
 			}
-			await this.emitAssetsFile(compilation);
 		});
 
 	}
@@ -51,7 +68,7 @@ module.exports = class MiniProgramWebpackPlugin {
 				const relativeRuntime = path.relative(path.dirname(chunk.name), './runtime').replace(/\\/g, '/');
 				const relativeCommon = path.relative(path.dirname(chunk.name), './commons').replace(/\\/g, '/');
 				const relativeVendors = path.relative(path.dirname(chunk.name), './vendors').replace(/\\/g, '/');
-				// to rewrite ===4 require commomjs ===5 require ventdors.js
+				// TODO rewrite ===4 require commomjs ===5 require ventdors.js
 				source.add(`;require("${relativeRuntime}")`);
 				if (requireModules.length >= 4) {
 					source.add(`;require("${relativeCommon}")`);
@@ -200,19 +217,22 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	// parse components
 	async getComponents(components, instance) {
-		const {
-			usingComponents = {}
-		} = fsExtra.readJSONSync(`${instance}.json`);
-		const componentBase = path.parse(instance).dir;
-		for (const c of Object.values(usingComponents)) {
-			console.log(c);
-			if (c.indexOf('plugin://') !== 0 && c[0] === '.') {
-				const component = path.resolve(componentBase, c);
-				if (!components.has(component) && c.indexOf('plugin://') !== 0) {
-					components.add(path.relative(this.basePath, component));
-					await this.getComponents(components, component);
+		try {
+			const {
+				usingComponents = {}
+			} = fsExtra.readJSONSync(`${instance}.json`);
+			const componentBase = path.parse(instance).dir;
+			for (const c of Object.values(usingComponents)) {
+				if (c.indexOf('plugin://') !== 0 && c[0] === '.') {
+					const component = path.resolve(componentBase, c);
+					if (!components.has(component) && c.indexOf('plugin://') !== 0) {
+						components.add(path.relative(this.basePath, component));
+						await this.getComponents(components, component);
+					}
 				}
 			}
+		} catch (error) {
+			console.warn(`file not found: ${instance}`);
 		}
 	}
 
