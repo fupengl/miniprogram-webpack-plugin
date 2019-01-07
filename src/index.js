@@ -2,6 +2,7 @@ const path = require('path');
 const fsExtra = require('fs-extra');
 const globby = require('globby');
 const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin');
+const { optimize } = require('webpack');
 const MultiEntryPlugin = require('webpack/lib/MultiEntryPlugin');
 const LoaderTargetPlugin = require('webpack/lib/LoaderTargetPlugin');
 const FunctionModulePlugin = require('webpack/lib/FunctionModulePlugin');
@@ -18,12 +19,16 @@ module.exports = class MiniProgramWebpackPlugin {
 			extensions: ['.js', '.ts'], // script ext
 			include: [], // include assets file
 			exclude: [], // ignore assets file
-			assetsChunkName: '__assets_chunk_name__'
+			assetsChunkName: '__assets_chunk__',
+			commonsChunkName: 'commons',
+			vendorChunkName: 'vendor',
+			runtimeChunkName: 'runtime'
 		}, options);
 	}
 
 	apply(compiler) {
 
+		this.setBasePath(compiler);
 		this.enforceTarget(compiler);
 
 		const catchError = handler => async arg => {
@@ -44,12 +49,11 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		compiler.hooks.compilation.tap(pluginName, this.compilationHooks.bind(this));
 
-		let firstInit = true;
 		compiler.hooks.emit.tapPromise(pluginName, async compilation => {
 			try {
 				const { clear } = this.options;
-				if (clear && firstInit) {
-					firstInit = false;
+				if (clear && !this.firstClean) {
+					this.firstClean = true;
 					await MiniProgramWebpackPlugin.clearOutPut(compilation);
 				}
 				await this.emitAssetsFile(compilation);
@@ -61,25 +65,36 @@ module.exports = class MiniProgramWebpackPlugin {
 	}
 
 	compilationHooks(compilation) {
-		compilation.chunkTemplate.hooks.render.tap(pluginName, (modules, chunk) => {
-			if (this.appEntries.includes(chunk.name)) {
-				const requireModules = modules.listMap().children[Object.keys(modules.listMap().children).pop()].generatedCode.split(',');
-				const source = new ConcatSource(modules);
-				const relativeRuntime = path.relative(path.dirname(chunk.name), './runtime').replace(/\\/g, '/');
-				const relativeCommon = path.relative(path.dirname(chunk.name), './commons').replace(/\\/g, '/');
-				const relativeVendors = path.relative(path.dirname(chunk.name), './vendors').replace(/\\/g, '/');
-				// TODO rewrite ===4 require commomjs ===5 require ventdors.js
-				source.add(`;require("${relativeRuntime}")`);
-				if (requireModules.length >= 4) {
-					source.add(`;require("${relativeCommon}")`);
-				}
-				if (requireModules.length >= 5) {
-					source.add(`;require("${relativeVendors}")`);
-				}
-				return source;
-			}
-			return modules;
+
+		// compilation.chunkTemplate.hooks.render.tap(pluginName, (modules, chunk) => {
+		// 	if (this.appEntries.includes(chunk.name)) {
+		// 		const requireModules = modules.listMap().children[Object.keys(modules.listMap().children).pop()].generatedCode.split(',');
+		// 		const source = new ConcatSource(modules);
+		// 		const relativeRuntime = path.relative(path.dirname(chunk.name), './runtime').replace(/\\/g, '/');
+		// 		const relativeCommon = path.relative(path.dirname(chunk.name), './commons').replace(/\\/g, '/');
+		// 		const relativeVendors = path.relative(path.dirname(chunk.name), './vendors').replace(/\\/g, '/');
+		// 		// TODO rewrite ===4 require commomjs ===5 require vendors.js
+		// 		source.add(`;require("${relativeRuntime}")`);
+		// 		if (requireModules.length >= 4) {
+		// 			source.add(`;require("${relativeCommon}")`);
+		// 		}
+		// 		if (requireModules.length >= 5) {
+		// 			source.add(`;require("${relativeVendors}")`);
+		// 		}
+		// 		return source;
+		// 	}
+		// 	return modules;
+		// });
+
+		compilation.chunkTemplate.hooks.renderWithEntry.tap(pluginName, (modules, chunk) => {
+			console.log(chunk.name);
+			const children = modules.listMap().children;
+			const generatedCode = children[Object.keys(children).pop()].generatedCode;
+			console.log(JSON.parse(generatedCode.substring(generatedCode.indexOf(',') + 2, generatedCode.length - 3)));
 		});
+
+		console.log(Object.keys(compilation.chunkTemplate.hooks));
+
 		// splice assets module
 		compilation.hooks.beforeChunkAssets.tap(pluginName, () => {
 			const assetsChunkIndex = compilation.chunks.findIndex(
@@ -89,29 +104,19 @@ module.exports = class MiniProgramWebpackPlugin {
 				compilation.chunks.splice(assetsChunkIndex, 1);
 			}
 		});
+
+	}
+
+	setBasePath(compiler) {
+		const appEntry = compiler.options.entry.app;
+		if (!appEntry) {
+			throw new TypeError('Entry invalid.');
+		}
+		this.basePath = path.resolve(path.dirname(appEntry));
 	}
 
 	async enforceTarget(compiler) {
 		const { options } = compiler;
-		options.optimization.runtimeChunk = { name: 'runtime' };
-		options.optimization.splitChunks.cacheGroups = {
-			default: false,
-			//node_modules
-			vendor: {
-				chunks: 'all',
-				test: /[\\/]node_modules[\\/]/,
-				name: 'vendors',
-				minChunks: 0
-			},
-			//其他公用代码
-			common: {
-				chunks: 'all',
-				test: /[\\/]src[\\/]/,
-				minChunks: 2,
-				name: 'commons',
-				minSize: 0
-			}
-		};
 		// set jsonp obj motuned obj
 		options.output.globalObject = 'global';
 
@@ -129,18 +134,10 @@ module.exports = class MiniProgramWebpackPlugin {
 	}
 
 	async setAppEntries(compiler) {
-		const appEntry = compiler.options.entry.app;
-		if (!appEntry) {
-			throw new TypeError('Entry invalid.');
-		}
-		try {
-			this.basePath = path.resolve(path.dirname(appEntry));
-			this.appEntries = await this.resolveAppEntries();
-			await this.addAssetsEntries(compiler);
-			await this.addScriptEntry(compiler);
-		} catch (error) {
-			console.log(error);
-		}
+		this.appEntries = await this.resolveAppEntries();
+		await this.addAssetsEntries(compiler);
+		await this.addScriptEntry(compiler);
+		this.applyPlugin(compiler);
 	}
 
 	// resolve tabbar page compoments
@@ -187,6 +184,52 @@ module.exports = class MiniProgramWebpackPlugin {
 			}
 		});
 		return ret;
+	}
+
+	// code splite
+	applyPlugin(compiler) {
+		const { options } = compiler;
+		const { runtimeChunkName, commonsChunkName, vendorChunkName } = this.options;
+		const basePath = this.basePath;
+
+		new optimize.RuntimeChunkPlugin({ name: runtimeChunkName }).apply(compiler);
+
+		new optimize.SplitChunksPlugin({
+			hidePathInfo: false,
+			chunks: 'async',
+			minSize: 10000,
+			minChunks: 1,
+			maxAsyncRequests: Infinity,
+			automaticNameDelimiter: '~',
+			maxInitialRequests: Infinity,
+			name: true,
+			cacheGroups: {
+				default: false,
+				//node_modules
+				vendor: {
+					chunks: 'all',
+					test: /[\\/]node_modules[\\/]/,
+					name: vendorChunkName,
+					minChunks: 0
+				},
+				//其他公用代码
+				common: {
+					chunks: 'all',
+					test: /[\\/]src[\\/]/,
+					minChunks: 2,
+					// name: 'commons',
+					name({ context }) {
+						const { subpackages = [] } = require(path.resolve(basePath, 'app.json'));
+						const index = subpackages.findIndex(item => context.includes(item.root));
+						if (index !== -1) {
+							return `${subpackages[index].root || ''}/${commonsChunkName}'`;
+						}
+						return commonsChunkName;
+					},
+					minSize: 0
+				}
+			}
+		}).apply(compiler);
 	}
 
 	// add script entry
@@ -236,6 +279,7 @@ module.exports = class MiniProgramWebpackPlugin {
 		}
 	}
 
+	// copy assets file
 	async emitAssetsFile(compilation) {
 		const emitAssets = [];
 		for (let entry of this.assetsEntry) {

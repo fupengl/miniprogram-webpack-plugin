@@ -38,7 +38,7 @@ module.exports = {
 	plugins: [
 		new MiniProgramWebpackPlugin()
 	],
-	devtool: 'source-map',
+	devtool: 'none',
 	resolve: {
 		modules: [`src/${ext}`, 'node_modules'],
 		extensions: ['.js', '.ts'],
