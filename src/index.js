@@ -65,35 +65,25 @@ module.exports = class MiniProgramWebpackPlugin {
 	}
 
 	compilationHooks(compilation) {
-
-		// compilation.chunkTemplate.hooks.render.tap(pluginName, (modules, chunk) => {
-		// 	if (this.appEntries.includes(chunk.name)) {
-		// 		const requireModules = modules.listMap().children[Object.keys(modules.listMap().children).pop()].generatedCode.split(',');
-		// 		const source = new ConcatSource(modules);
-		// 		const relativeRuntime = path.relative(path.dirname(chunk.name), './runtime').replace(/\\/g, '/');
-		// 		const relativeCommon = path.relative(path.dirname(chunk.name), './commons').replace(/\\/g, '/');
-		// 		const relativeVendors = path.relative(path.dirname(chunk.name), './vendors').replace(/\\/g, '/');
-		// 		// TODO rewrite ===4 require commomjs ===5 require vendors.js
-		// 		source.add(`;require("${relativeRuntime}")`);
-		// 		if (requireModules.length >= 4) {
-		// 			source.add(`;require("${relativeCommon}")`);
-		// 		}
-		// 		if (requireModules.length >= 5) {
-		// 			source.add(`;require("${relativeVendors}")`);
-		// 		}
-		// 		return source;
-		// 	}
-		// 	return modules;
-		// });
-
 		compilation.chunkTemplate.hooks.renderWithEntry.tap(pluginName, (modules, chunk) => {
-			console.log(chunk.name);
 			const children = modules.listMap().children;
 			const generatedCode = children[Object.keys(children).pop()].generatedCode;
-			console.log(JSON.parse(generatedCode.substring(generatedCode.indexOf(',') + 2, generatedCode.length - 3)));
+			const requireModule = JSON.parse(generatedCode.substring(generatedCode.indexOf(',') + 2, generatedCode.length - 3));
+			const source = new ConcatSource(modules);
+			requireModule.forEach(module => {
+				if (this.chunkMap[module]) {
+					source.add(`;require("${path.relative(path.dirname(chunk.name), this.chunkMap[module]).replace(/\\/g, '/')}")`);
+				}
+			});
+			return source;
 		});
 
-		console.log(Object.keys(compilation.chunkTemplate.hooks));
+		compilation.hooks.afterOptimizeChunkIds.tap(pluginName, chunks => {
+			this.chunkMap = {};
+			chunks.forEach(item => {
+				this.chunkMap[item.id] = item.name;
+			});
+		});
 
 		// splice assets module
 		compilation.hooks.beforeChunkAssets.tap(pluginName, () => {
@@ -188,7 +178,6 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	// code splite
 	applyPlugin(compiler) {
-		const { options } = compiler;
 		const { runtimeChunkName, commonsChunkName, vendorChunkName } = this.options;
 		const basePath = this.basePath;
 
@@ -222,7 +211,7 @@ module.exports = class MiniProgramWebpackPlugin {
 						const { subpackages = [] } = require(path.resolve(basePath, 'app.json'));
 						const index = subpackages.findIndex(item => context.includes(item.root));
 						if (index !== -1) {
-							return `${subpackages[index].root || ''}/${commonsChunkName}'`;
+							return `${subpackages[index].root || ''}/${commonsChunkName}`;
 						}
 						return commonsChunkName;
 					},

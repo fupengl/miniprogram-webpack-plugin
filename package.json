@@ -6,6 +6,7 @@
     "start": "jest test --watch",
     "test": "jest test",
     "test:webpack": "cd test && webpack --mode=development --progress",
+    "test:webpack:prod": "cd test && webpack --mode=production --progress",
     "test:webpack:ts": "cd test && TEST_EXT=ts webpack --progress",
     "lint": "eslint --ext .js src/ --fix",
     "prebuild": "rimraf ./lib && mkdirp ./lib",
