@@ -136,6 +136,7 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		let tabBarAssets = new Set();
 		let components = new Set();
+		this.subpackRoot = [];
 
 		for (const { iconPath, selectedIconPath } of (tabBar.list || [])) {
 			if (iconPath) {
@@ -148,6 +149,7 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		// parse subpage
 		for (const subPage of subpackages) {
+			this.subpackRoot.push(subPage.root);
 			for (const page of (subPage.pages || [])) {
 				pages.push(path.join(subPage.root, page));
 			}
@@ -179,7 +181,7 @@ module.exports = class MiniProgramWebpackPlugin {
 	// code splite
 	applyPlugin(compiler) {
 		const { runtimeChunkName, commonsChunkName, vendorChunkName } = this.options;
-		const basePath = this.basePath;
+		const subpackRoot = this.subpackRoot;
 
 		new optimize.RuntimeChunkPlugin({ name: runtimeChunkName }).apply(compiler);
 
@@ -206,12 +208,10 @@ module.exports = class MiniProgramWebpackPlugin {
 					chunks: 'all',
 					test: /[\\/]src[\\/]/,
 					minChunks: 2,
-					// name: 'commons',
 					name({ context }) {
-						const { subpackages = [] } = require(path.resolve(basePath, 'app.json'));
-						const index = subpackages.findIndex(item => context.includes(item.root));
+						const index = subpackRoot.findIndex(item => context.includes(item));
 						if (index !== -1) {
-							return `${subpackages[index].root || ''}/${commonsChunkName}`;
+							return `${subpackRoot[index]}/${commonsChunkName}`;
 						}
 						return commonsChunkName;
 					},
