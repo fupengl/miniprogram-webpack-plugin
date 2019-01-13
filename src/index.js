@@ -211,7 +211,7 @@ module.exports = class MiniProgramWebpackPlugin {
 					name({ context }) {
 						const index = subpackRoot.findIndex(item => context.includes(item));
 						if (index !== -1) {
-							return `${subpackRoot[index]}/${commonsChunkName}`;
+							return path.join(subpackRoot[index], commonsChunkName);
 						}
 						return commonsChunkName;
 					},

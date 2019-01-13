@@ -1,6 +1,6 @@
 {
   "name": "miniprogram-webpack-plugin",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "微信小程序 Webpack 插件",
   "scripts": {
     "start": "jest test --watch",
