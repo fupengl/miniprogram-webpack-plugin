@@ -136,6 +136,8 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		let tabBarAssets = new Set();
 		let components = new Set();
+		let subPageRoots = [];
+		let independentPageRoots = [];
 		this.subpackRoot = [];
 
 		for (const { iconPath, selectedIconPath } of (tabBar.list || [])) {
@@ -149,7 +151,10 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		// parse subpage
 		for (const subPage of subpackages) {
-			this.subpackRoot.push(subPage.root);
+			subPageRoots.push(subPage.root);
+			if (subPage.independent) {
+				independentPageRoots.push(subPage.root);
+			}
 			for (const page of (subPage.pages || [])) {
 				pages.push(path.join(subPage.root, page));
 			}
@@ -173,6 +178,12 @@ module.exports = class MiniProgramWebpackPlugin {
 			},
 			tabBarAssets: {
 				get: () => tabBarAssets
+			},
+			subPageRoots: {
+				get: () => subPageRoots
+			},
+			independentPageRoots: {
+				get: () => independentPageRoots
 			}
 		});
 		return ret;
@@ -181,9 +192,19 @@ module.exports = class MiniProgramWebpackPlugin {
 	// code splite
 	applyPlugin(compiler) {
 		const { runtimeChunkName, commonsChunkName, vendorChunkName } = this.options;
-		const subpackRoot = this.subpackRoot;
+		const subpackRoots = this.appEntries.subPageRoots;
+		const independentPageRoots = this.appEntries.independentPageRoots;
 
-		new optimize.RuntimeChunkPlugin({ name: runtimeChunkName }).apply(compiler);
+		new optimize.RuntimeChunkPlugin({
+			name({ name }) {
+				const index = independentPageRoots.findIndex(item => name.includes(item));
+				if (index !== -1) {
+					console.log(1);
+					return path.join(independentPageRoots[index], runtimeChunkName);
+				}
+				return runtimeChunkName;
+			}
+		}).apply(compiler);
 
 		new optimize.SplitChunksPlugin({
 			hidePathInfo: false,
@@ -209,9 +230,9 @@ module.exports = class MiniProgramWebpackPlugin {
 					test: /[\\/]src[\\/]/,
 					minChunks: 2,
 					name({ context }) {
-						const index = subpackRoot.findIndex(item => context.includes(item));
+						const index = subpackRoots.findIndex(item => context.includes(item));
 						if (index !== -1) {
-							return path.join(subpackRoot[index], commonsChunkName);
+							return path.join(subpackRoots[index], commonsChunkName);
 						}
 						return commonsChunkName;
 					},
@@ -264,7 +285,6 @@ module.exports = class MiniProgramWebpackPlugin {
 				}
 			}
 		} catch (error) {
-			console.warn(`file not found: ${instance}`);
 		}
 	}
 

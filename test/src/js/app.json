@@ -23,6 +23,13 @@
         "productDetail",
         "productList"
       ]
+    },
+    {
+      "root": "subPackages/independent",
+      "pages": [
+        "route"
+      ],
+      "independent": true
     }
   ],
   "window":{
