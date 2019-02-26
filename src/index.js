@@ -160,6 +160,8 @@ module.exports = class MiniProgramWebpackPlugin {
 			}
 		}
 
+		await this.getComponents(components, path.resolve(this.basePath, 'app'));
+
 		// resolve page components
 		for (const page of pages) {
 			await this.getComponents(components, path.resolve(this.basePath, page));
