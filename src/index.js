@@ -199,7 +199,6 @@ module.exports = class MiniProgramWebpackPlugin {
 			name({ name }) {
 				const index = independentPageRoots.findIndex(item => name.includes(item));
 				if (index !== -1) {
-					console.log(1);
 					return path.join(independentPageRoots[index], runtimeChunkName);
 				}
 				return runtimeChunkName;
