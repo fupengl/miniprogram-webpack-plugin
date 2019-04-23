@@ -160,7 +160,8 @@ module.exports = class MiniProgramWebpackPlugin {
 			}
 		}
 
-		await this.getComponents(components, path.resolve(this.basePath, 'app'));
+		// add app.[ts/js]
+		pages.push('app')
 
 		// resolve page components
 		for (const page of pages) {
@@ -170,7 +171,7 @@ module.exports = class MiniProgramWebpackPlugin {
 		components = Array.from(components) || [];
 		tabBarAssets = Array.from(tabBarAssets) || [];
 
-		const ret = ['app', ...pages, ...components];
+		const ret = [...pages, ...components];
 		Object.defineProperties(ret, {
 			pages: {
 				get: () => pages
@@ -249,7 +250,11 @@ module.exports = class MiniProgramWebpackPlugin {
 			.filter(resource => resource !== 'app')
 			.forEach(resource => {
 				const fullPath = this.getFullScriptPath(resource);
-				new SingleEntryPlugin(this.basePath, fullPath, resource).apply(compiler);
+				if (fullPath) {
+					new SingleEntryPlugin(this.basePath, fullPath, resource).apply(compiler);
+				} else {
+					console.warn(`file ${resource} is exists`)
+				}
 			});
 	}
 
@@ -272,9 +277,7 @@ module.exports = class MiniProgramWebpackPlugin {
 	// parse components
 	async getComponents(components, instance) {
 		try {
-			const {
-				usingComponents = {}
-			} = fsExtra.readJSONSync(`${instance}.json`);
+			const { usingComponents = {} } = fsExtra.readJSONSync(`${instance}.json`);
 			const componentBase = path.parse(instance).dir;
 			for (const c of Object.values(usingComponents)) {
 				if (c.indexOf('plugin://') !== 0 && c[0] === '.') {
@@ -283,6 +286,8 @@ module.exports = class MiniProgramWebpackPlugin {
 						components.add(path.relative(this.basePath, component));
 						await this.getComponents(components, component);
 					}
+				} else if (c.indexOf('node_modules') === 0) {
+
 				}
 			}
 		} catch (error) {
@@ -312,10 +317,7 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	// script full path
 	getFullScriptPath(script) {
-		const {
-			basePath,
-			options: { extensions }
-		} = this;
+		const { basePath, options: { extensions } } = this;
 		for (const ext of extensions) {
 			const fullPath = path.resolve(basePath, script + ext);
 			if (fsExtra.existsSync(fullPath)) {
