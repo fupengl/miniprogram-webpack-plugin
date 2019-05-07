@@ -1,33 +1,35 @@
-const path = require('path');
-const fsExtra = require('fs-extra');
-const globby = require('globby');
-const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin');
-const { optimize } = require('webpack');
-const MultiEntryPlugin = require('webpack/lib/MultiEntryPlugin');
-const LoaderTargetPlugin = require('webpack/lib/LoaderTargetPlugin');
-const FunctionModulePlugin = require('webpack/lib/FunctionModulePlugin');
-const NodeSourcePlugin = require('webpack/lib/node/NodeSourcePlugin');
-const JsonpTemplatePlugin = require('webpack/lib/web/JsonpTemplatePlugin');
-const { ConcatSource } = require('webpack-sources');
+const path = require("path");
+const fsExtra = require("fs-extra");
+const globby = require("globby");
+const SingleEntryPlugin = require("webpack/lib/SingleEntryPlugin");
+const { optimize } = require("webpack");
+const MultiEntryPlugin = require("webpack/lib/MultiEntryPlugin");
+const LoaderTargetPlugin = require("webpack/lib/LoaderTargetPlugin");
+const FunctionModulePlugin = require("webpack/lib/FunctionModulePlugin");
+const NodeSourcePlugin = require("webpack/lib/node/NodeSourcePlugin");
+const JsonpTemplatePlugin = require("webpack/lib/web/JsonpTemplatePlugin");
+const { ConcatSource } = require("webpack-sources");
 
-const pluginName = 'MiniProgramWebpackPlugin';
+const pluginName = "MiniProgramWebpackPlugin";
 module.exports = class MiniProgramWebpackPlugin {
-
 	constructor(options = {}) {
-		this.options = Object.assign({}, {
-			clear: true,
-			extensions: ['.js', '.ts'], // script ext
-			include: [], // include assets file
-			exclude: [], // ignore assets file
-			assetsChunkName: '__assets_chunk__',
-			commonsChunkName: 'commons',
-			vendorChunkName: 'vendor',
-			runtimeChunkName: 'runtime'
-		}, options);
+		this.options = Object.assign(
+			{},
+			{
+				clear: true,
+				extensions: [".js", ".ts"], // script ext
+				include: [], // include assets file
+				exclude: [], // ignore assets file
+				assetsChunkName: "__assets_chunk__",
+				commonsChunkName: "commons",
+				vendorChunkName: "vendor",
+				runtimeChunkName: "runtime"
+			},
+			options
+		);
 	}
 
 	apply(compiler) {
-
 		this.setBasePath(compiler);
 		this.enforceTarget(compiler);
 
@@ -39,15 +41,20 @@ module.exports = class MiniProgramWebpackPlugin {
 			}
 		};
 
-		compiler.hooks.run.tapPromise(pluginName, catchError(async compiler => {
-			await this.setAppEntries(compiler);
-		}));
+		compiler.hooks.run.tapPromise(
+			pluginName,
+			catchError(compiler => this.setAppEntries(compiler))
+		);
 
-		compiler.hooks.watchRun.tapPromise(pluginName, catchError(async compiler => {
-			await this.setAppEntries(compiler);
-		}));
+		compiler.hooks.watchRun.tapPromise(
+			pluginName,
+			catchError(compiler => this.setAppEntries(compiler))
+		);
 
-		compiler.hooks.compilation.tap(pluginName, this.compilationHooks.bind(this));
+		compiler.hooks.compilation.tap(
+			pluginName,
+			this.compilationHooks.bind(this)
+		);
 
 		compiler.hooks.emit.tapPromise(pluginName, async compilation => {
 			try {
@@ -61,22 +68,34 @@ module.exports = class MiniProgramWebpackPlugin {
 				console.warn(error);
 			}
 		});
-
 	}
 
 	compilationHooks(compilation) {
-		compilation.chunkTemplate.hooks.renderWithEntry.tap(pluginName, (modules, chunk) => {
-			const children = modules.listMap().children;
-			const generatedCode = children[Object.keys(children).pop()].generatedCode;
-			const requireModule = JSON.parse(generatedCode.substring(generatedCode.indexOf(',') + 2, generatedCode.length - 3));
-			const source = new ConcatSource(modules);
-			requireModule.forEach(module => {
-				if (this.chunkMap[module]) {
-					source.add(`;require("${path.relative(path.dirname(chunk.name), this.chunkMap[module]).replace(/\\/g, '/')}")`);
-				}
-			});
-			return source;
-		});
+		compilation.chunkTemplate.hooks.renderWithEntry.tap(
+			pluginName,
+			(modules, chunk) => {
+				const children = modules.listMap().children;
+				const generatedCode =
+					children[Object.keys(children).pop()].generatedCode;
+				const requireModule = JSON.parse(
+					generatedCode.substring(
+						generatedCode.indexOf(",") + 2,
+						generatedCode.length - 3
+					)
+				);
+				const source = new ConcatSource(modules);
+				requireModule.forEach(module => {
+					if (this.chunkMap[module]) {
+						source.add(
+							`;require("${path
+								.relative(path.dirname(chunk.name), this.chunkMap[module])
+								.replace(/\\/g, "/")}")`
+						);
+					}
+				});
+				return source;
+			}
+		);
 
 		compilation.hooks.afterOptimizeChunkIds.tap(pluginName, chunks => {
 			this.chunkMap = {};
@@ -94,13 +113,12 @@ module.exports = class MiniProgramWebpackPlugin {
 				compilation.chunks.splice(assetsChunkIndex, 1);
 			}
 		});
-
 	}
 
 	setBasePath(compiler) {
 		const appEntry = compiler.options.entry.app;
 		if (!appEntry) {
-			throw new TypeError('Entry invalid.');
+			throw new TypeError("Entry invalid.");
 		}
 		this.basePath = path.resolve(path.dirname(appEntry));
 	}
@@ -108,22 +126,23 @@ module.exports = class MiniProgramWebpackPlugin {
 	async enforceTarget(compiler) {
 		const { options } = compiler;
 		// set jsonp obj motuned obj
-		options.output.globalObject = 'global';
+		options.output.globalObject = "global";
+		options.node = {
+			...(options.node || {}),
+			global: false
+		};
 
-		if (!options.node || options.node.global) {
-			options.node = options.node || {};
-			options.node.global = false;
-		}
 		// set target to web
 		options.target = compiler => {
 			new JsonpTemplatePlugin(options.output).apply(compiler);
 			new FunctionModulePlugin(options.output).apply(compiler);
 			new NodeSourcePlugin(options.node).apply(compiler);
-			new LoaderTargetPlugin('web').apply(compiler);
+			new LoaderTargetPlugin("web").apply(compiler);
 		};
 	}
 
 	async setAppEntries(compiler) {
+		this.npmComponts = new Set();
 		this.appEntries = await this.resolveAppEntries();
 		await this.addAssetsEntries(compiler);
 		await this.addScriptEntry(compiler);
@@ -132,7 +151,9 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	// resolve tabbar page compoments
 	async resolveAppEntries() {
-		const { tabBar = {}, pages = [], subpackages = [] } = fsExtra.readJSONSync(path.resolve(this.basePath, 'app.json'));
+		const { tabBar = {}, pages = [], subpackages = [] } = fsExtra.readJSONSync(
+			path.resolve(this.basePath, "app.json")
+		);
 
 		let tabBarAssets = new Set();
 		let components = new Set();
@@ -140,7 +161,7 @@ module.exports = class MiniProgramWebpackPlugin {
 		let independentPageRoots = [];
 		this.subpackRoot = [];
 
-		for (const { iconPath, selectedIconPath } of (tabBar.list || [])) {
+		for (const { iconPath, selectedIconPath } of tabBar.list || []) {
 			if (iconPath) {
 				tabBarAssets.add(iconPath);
 			}
@@ -155,13 +176,13 @@ module.exports = class MiniProgramWebpackPlugin {
 			if (subPage.independent) {
 				independentPageRoots.push(subPage.root);
 			}
-			for (const page of (subPage.pages || [])) {
+			for (const page of subPage.pages || []) {
 				pages.push(path.join(subPage.root, page));
 			}
 		}
 
 		// add app.[ts/js]
-		pages.push('app')
+		pages.push("app");
 
 		// resolve page components
 		for (const page of pages) {
@@ -194,13 +215,19 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	// code splite
 	applyPlugin(compiler) {
-		const { runtimeChunkName, commonsChunkName, vendorChunkName } = this.options;
+		const {
+			runtimeChunkName,
+			commonsChunkName,
+			vendorChunkName
+		} = this.options;
 		const subpackRoots = this.appEntries.subPageRoots;
 		const independentPageRoots = this.appEntries.independentPageRoots;
 
 		new optimize.RuntimeChunkPlugin({
 			name({ name }) {
-				const index = independentPageRoots.findIndex(item => name.includes(item));
+				const index = independentPageRoots.findIndex(item =>
+					name.includes(item)
+				);
 				if (index !== -1) {
 					return path.join(independentPageRoots[index], runtimeChunkName);
 				}
@@ -210,29 +237,31 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		new optimize.SplitChunksPlugin({
 			hidePathInfo: false,
-			chunks: 'async',
+			chunks: "async",
 			minSize: 10000,
 			minChunks: 1,
 			maxAsyncRequests: Infinity,
-			automaticNameDelimiter: '~',
+			automaticNameDelimiter: "~",
 			maxInitialRequests: Infinity,
 			name: true,
 			cacheGroups: {
 				default: false,
-				//node_modules
+				// node_modules
 				vendor: {
-					chunks: 'all',
+					chunks: "all",
 					test: /[\\/]node_modules[\\/]/,
 					name: vendorChunkName,
 					minChunks: 0
 				},
-				//其他公用代码
+				// 其他公用代码
 				common: {
-					chunks: 'all',
+					chunks: "all",
 					test: /[\\/]src[\\/]/,
 					minChunks: 2,
 					name({ context }) {
-						const index = subpackRoots.findIndex(item => context.includes(item));
+						const index = subpackRoots.findIndex(item =>
+							context.includes(item)
+						);
 						if (index !== -1) {
 							return path.join(subpackRoots[index], commonsChunkName);
 						}
@@ -247,13 +276,17 @@ module.exports = class MiniProgramWebpackPlugin {
 	// add script entry
 	async addScriptEntry(compiler) {
 		this.appEntries
-			.filter(resource => resource !== 'app')
+			.filter(resource => resource !== "app")
 			.forEach(resource => {
-				const fullPath = this.getFullScriptPath(resource);
-				if (fullPath) {
-					new SingleEntryPlugin(this.basePath, fullPath, resource).apply(compiler);
+				if (this.npmComponts.has(resource)) {
+					new SingleEntryPlugin(this.basePath, path.join(process.cwd(), resource), resource).apply(compiler);
 				} else {
-					console.warn(`file ${resource} is exists`)
+					const fullPath = this.getFullScriptPath(resource);
+					if (fullPath) {
+						new SingleEntryPlugin(this.basePath, fullPath, resource).apply(compiler);
+					} else {
+						console.warn(`file ${resource} is exists`);
+					}
 				}
 			});
 	}
@@ -261,16 +294,19 @@ module.exports = class MiniProgramWebpackPlugin {
 	// add assets entry
 	async addAssetsEntries(compiler) {
 		const { include, exclude, extensions, assetsChunkName } = this.options;
-		const patterns = this.appEntries.map(resource => `${resource}.*`).concat(include);
+		const patterns = this.appEntries
+			.map(resource => `${resource}.*`)
+			.concat(include);
 		const entries = await globby(patterns, {
 			cwd: this.basePath,
 			nodir: true,
-			realpath: true,
+			realpath: false,
 			ignore: [...extensions.map(ext => `**/*${ext}`), ...exclude],
 			dot: false
 		});
 		entries.push(...this.appEntries.tabBarAssets);
 		this.assetsEntry = entries || [];
+		console.log(entries)
 		new MultiEntryPlugin(this.basePath, entries, assetsChunkName).apply(compiler);
 	}
 
@@ -278,20 +314,24 @@ module.exports = class MiniProgramWebpackPlugin {
 	async getComponents(components, instance) {
 		try {
 			const { usingComponents = {} } = fsExtra.readJSONSync(`${instance}.json`);
-			const componentBase = path.parse(instance).dir;
+			const instanceDir = path.parse(instance).dir;
 			for (const c of Object.values(usingComponents)) {
-				if (c.indexOf('plugin://') !== 0 && c[0] === '.') {
-					const component = path.resolve(componentBase, c);
-					if (!components.has(component) && c.indexOf('plugin://') !== 0) {
-						components.add(path.relative(this.basePath, component));
-						await this.getComponents(components, component);
-					}
-				} else if (c.indexOf('node_modules') === 0) {
-
+				if (c.indexOf("plugin://") === 0) {
+					break;
+				}
+				if (c.indexOf("node_modules") === 0) {
+					this.npmComponts.add(c)
+					components.add(c)
+					this.getComponents(components, path.resolve(process.cwd(), c))
+					break;
+				}
+				const component = path.resolve(instanceDir, c);
+				if (!components.has(component)) {
+					components.add(path.relative(this.basePath, component));
+					await this.getComponents(components, component);
 				}
 			}
-		} catch (error) {
-		}
+		} catch (error) {}
 	}
 
 	// copy assets file
@@ -317,7 +357,10 @@ module.exports = class MiniProgramWebpackPlugin {
 
 	// script full path
 	getFullScriptPath(script) {
-		const { basePath, options: { extensions } } = this;
+		const {
+			basePath,
+			options: { extensions }
+		} = this;
 		for (const ext of extensions) {
 			const fullPath = path.resolve(basePath, script + ext);
 			if (fsExtra.existsSync(fullPath)) {

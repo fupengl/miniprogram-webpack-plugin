@@ -7,7 +7,7 @@ ehthumbs.db
 Thumbs.db
 .log
 *.log
-node_modules
+./node_modules
 dist
 lib
 .idea
