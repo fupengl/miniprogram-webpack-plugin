@@ -1,6 +1,6 @@
 {
   "usingComponents": {
     "index-component": "../../components/index-component/index-component",
-    "npm-component": "node_modules/npm-component/npm-component"
+    "npm-component": "/node_modules/npm-component/npm-component"
   }
 }

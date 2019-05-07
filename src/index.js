@@ -1,29 +1,29 @@
-const path = require("path");
-const fsExtra = require("fs-extra");
-const globby = require("globby");
-const SingleEntryPlugin = require("webpack/lib/SingleEntryPlugin");
-const { optimize } = require("webpack");
-const MultiEntryPlugin = require("webpack/lib/MultiEntryPlugin");
-const LoaderTargetPlugin = require("webpack/lib/LoaderTargetPlugin");
-const FunctionModulePlugin = require("webpack/lib/FunctionModulePlugin");
-const NodeSourcePlugin = require("webpack/lib/node/NodeSourcePlugin");
-const JsonpTemplatePlugin = require("webpack/lib/web/JsonpTemplatePlugin");
-const { ConcatSource } = require("webpack-sources");
+const path = require('path');
+const fsExtra = require('fs-extra');
+const globby = require('globby');
+const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin');
+const { optimize } = require('webpack');
+const LoaderTargetPlugin = require('webpack/lib/LoaderTargetPlugin');
+const FunctionModulePlugin = require('webpack/lib/FunctionModulePlugin');
+const NodeSourcePlugin = require('webpack/lib/node/NodeSourcePlugin');
+const JsonpTemplatePlugin = require('webpack/lib/web/JsonpTemplatePlugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+const { ConcatSource } = require('webpack-sources');
 
-const pluginName = "MiniProgramWebpackPlugin";
+const pluginName = 'MiniProgramWebpackPlugin';
 module.exports = class MiniProgramWebpackPlugin {
 	constructor(options = {}) {
 		this.options = Object.assign(
 			{},
 			{
 				clear: true,
-				extensions: [".js", ".ts"], // script ext
-				include: [], // include assets file
+				extensions: ['.js', '.ts'], // script ext
+				include: ['.wxml', '.wxss', '.json'], // include assets file
 				exclude: [], // ignore assets file
-				assetsChunkName: "__assets_chunk__",
-				commonsChunkName: "commons",
-				vendorChunkName: "vendor",
-				runtimeChunkName: "runtime"
+				assetsChunkName: '__assets_chunk__',
+				commonsChunkName: 'commons',
+				vendorChunkName: 'vendor',
+				runtimeChunkName: 'runtime'
 			},
 			options
 		);
@@ -63,7 +63,6 @@ module.exports = class MiniProgramWebpackPlugin {
 					this.firstClean = true;
 					await MiniProgramWebpackPlugin.clearOutPut(compilation);
 				}
-				await this.emitAssetsFile(compilation);
 			} catch (error) {
 				console.warn(error);
 			}
@@ -79,7 +78,7 @@ module.exports = class MiniProgramWebpackPlugin {
 					children[Object.keys(children).pop()].generatedCode;
 				const requireModule = JSON.parse(
 					generatedCode.substring(
-						generatedCode.indexOf(",") + 2,
+						generatedCode.indexOf(',') + 2,
 						generatedCode.length - 3
 					)
 				);
@@ -89,7 +88,7 @@ module.exports = class MiniProgramWebpackPlugin {
 						source.add(
 							`;require("${path
 								.relative(path.dirname(chunk.name), this.chunkMap[module])
-								.replace(/\\/g, "/")}")`
+								.replace(/\\/g, '/')}")`
 						);
 					}
 				});
@@ -118,7 +117,7 @@ module.exports = class MiniProgramWebpackPlugin {
 	setBasePath(compiler) {
 		const appEntry = compiler.options.entry.app;
 		if (!appEntry) {
-			throw new TypeError("Entry invalid.");
+			throw new TypeError('Entry invalid.');
 		}
 		this.basePath = path.resolve(path.dirname(appEntry));
 	}
@@ -126,7 +125,7 @@ module.exports = class MiniProgramWebpackPlugin {
 	async enforceTarget(compiler) {
 		const { options } = compiler;
 		// set jsonp obj motuned obj
-		options.output.globalObject = "global";
+		options.output.globalObject = 'global';
 		options.node = {
 			...(options.node || {}),
 			global: false
@@ -137,22 +136,24 @@ module.exports = class MiniProgramWebpackPlugin {
 			new JsonpTemplatePlugin(options.output).apply(compiler);
 			new FunctionModulePlugin(options.output).apply(compiler);
 			new NodeSourcePlugin(options.node).apply(compiler);
-			new LoaderTargetPlugin("web").apply(compiler);
+			new LoaderTargetPlugin('web').apply(compiler);
 		};
 	}
 
 	async setAppEntries(compiler) {
 		this.npmComponts = new Set();
 		this.appEntries = await this.resolveAppEntries();
-		await this.addAssetsEntries(compiler);
-		await this.addScriptEntry(compiler);
+		await Promise.all([
+			this.addScriptEntry(compiler),
+			this.copyAssetsFile(compiler)
+		]);
 		this.applyPlugin(compiler);
 	}
 
 	// resolve tabbar page compoments
 	async resolveAppEntries() {
 		const { tabBar = {}, pages = [], subpackages = [] } = fsExtra.readJSONSync(
-			path.resolve(this.basePath, "app.json")
+			path.resolve(this.basePath, 'app.json')
 		);
 
 		let tabBarAssets = new Set();
@@ -182,7 +183,7 @@ module.exports = class MiniProgramWebpackPlugin {
 		}
 
 		// add app.[ts/js]
-		pages.push("app");
+		pages.push('app');
 
 		// resolve page components
 		for (const page of pages) {
@@ -237,25 +238,25 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		new optimize.SplitChunksPlugin({
 			hidePathInfo: false,
-			chunks: "async",
+			chunks: 'async',
 			minSize: 10000,
 			minChunks: 1,
 			maxAsyncRequests: Infinity,
-			automaticNameDelimiter: "~",
+			automaticNameDelimiter: '~',
 			maxInitialRequests: Infinity,
 			name: true,
 			cacheGroups: {
 				default: false,
 				// node_modules
 				vendor: {
-					chunks: "all",
+					chunks: 'all',
 					test: /[\\/]node_modules[\\/]/,
 					name: vendorChunkName,
 					minChunks: 0
 				},
 				// 其他公用代码
 				common: {
-					chunks: "all",
+					chunks: 'all',
 					test: /[\\/]src[\\/]/,
 					minChunks: 2,
 					name({ context }) {
@@ -276,7 +277,7 @@ module.exports = class MiniProgramWebpackPlugin {
 	// add script entry
 	async addScriptEntry(compiler) {
 		this.appEntries
-			.filter(resource => resource !== "app")
+			.filter(resource => resource !== 'app')
 			.forEach(resource => {
 				if (this.npmComponts.has(resource)) {
 					new SingleEntryPlugin(this.basePath, path.join(process.cwd(), resource), resource).apply(compiler);
@@ -291,11 +292,12 @@ module.exports = class MiniProgramWebpackPlugin {
 			});
 	}
 
-	// add assets entry
-	async addAssetsEntries(compiler) {
-		const { include, exclude, extensions, assetsChunkName } = this.options;
+	// copy assets file
+	async copyAssetsFile(compiler) {
+		const { include, exclude, extensions } = this.options;
 		const patterns = this.appEntries
-			.map(resource => `${resource}.*`)
+			.map(resource => path.resolve(this.basePath, `${resource}.*`))
+			.concat([...this.npmComponts].map(resource => path.join(process.cwd(), `${resource}.*`)))
 			.concat(include);
 		const entries = await globby(patterns, {
 			cwd: this.basePath,
@@ -304,10 +306,22 @@ module.exports = class MiniProgramWebpackPlugin {
 			ignore: [...extensions.map(ext => `**/*${ext}`), ...exclude],
 			dot: false
 		});
-		entries.push(...this.appEntries.tabBarAssets);
-		this.assetsEntry = entries || [];
-		console.log(entries)
-		new MultiEntryPlugin(this.basePath, entries, assetsChunkName).apply(compiler);
+		new CopyWebpackPlugin([
+			...entries.map(resource => {
+				return {
+					from: resource,
+					to: resource.replace(`${this.basePath}/`, '').replace(`${process.cwd()}/`, '')
+				};
+			}),
+			...this.appEntries.tabBarAssets.map(resource => {
+				return {
+					from: path.resolve(this.basePath, resource),
+					to: resource
+				};
+			})],
+		{
+			ignore: [...extensions.map(ext => `**/*${ext}`), ...exclude, ...['sass', 'scss', 'css', 'less', 'styl']]
+		}).apply(compiler);
 	}
 
 	// parse components
@@ -316,13 +330,13 @@ module.exports = class MiniProgramWebpackPlugin {
 			const { usingComponents = {} } = fsExtra.readJSONSync(`${instance}.json`);
 			const instanceDir = path.parse(instance).dir;
 			for (const c of Object.values(usingComponents)) {
-				if (c.indexOf("plugin://") === 0) {
+				if (c.indexOf('plugin://') === 0) {
 					break;
 				}
-				if (c.indexOf("node_modules") === 0) {
-					this.npmComponts.add(c)
-					components.add(c)
-					this.getComponents(components, path.resolve(process.cwd(), c))
+				if (c.indexOf('/node_modules') === 0 && !this.npmComponts.has(c)) {
+					this.npmComponts.add(c);
+					components.add(c);
+					this.getComponents(components, path.resolve(process.cwd(), c));
 					break;
 				}
 				const component = path.resolve(instanceDir, c);
@@ -331,28 +345,7 @@ module.exports = class MiniProgramWebpackPlugin {
 					await this.getComponents(components, component);
 				}
 			}
-		} catch (error) {}
-	}
-
-	// copy assets file
-	async emitAssetsFile(compilation) {
-		const emitAssets = [];
-		for (let entry of this.assetsEntry) {
-			const assets = path.resolve(this.basePath, entry);
-			if (/\.(sass|scss|css|less|styl)$/.test(assets)) {
-				continue;
-			}
-			const toTmit = async () => {
-				const stat = await fsExtra.stat(assets);
-				const source = await fsExtra.readFile(assets);
-				compilation.assets[entry] = {
-					size: () => stat.size,
-					source: () => source
-				};
-			};
-			emitAssets.push(toTmit());
-		}
-		await Promise.all(emitAssets);
+		} catch (error) { }
 	}
 
 	// script full path
