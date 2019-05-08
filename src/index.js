@@ -20,7 +20,6 @@ module.exports = class MiniProgramWebpackPlugin {
 				extensions: [".js", ".ts"], // script ext
 				include: [".wxml", ".wxss", ".json"], // include assets file
 				exclude: [], // ignore assets file
-				assetsChunkName: "__assets_chunk__",
 				commonsChunkName: "commons",
 				vendorChunkName: "vendor",
 				runtimeChunkName: "runtime"
@@ -102,16 +101,6 @@ module.exports = class MiniProgramWebpackPlugin {
 				acc[item.id] = item.name;
 				return acc;
 			}, {});
-		});
-
-		// splice assets module
-		compilation.hooks.beforeChunkAssets.tap(pluginName, () => {
-			const assetsChunkIndex = compilation.chunks.findIndex(
-				({ name }) => name === this.options.assetsChunkName
-			);
-			if (assetsChunkIndex > -1) {
-				compilation.chunks.splice(assetsChunkIndex, 1);
-			}
 		});
 	}
 
