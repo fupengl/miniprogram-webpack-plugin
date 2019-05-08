@@ -9,6 +9,7 @@
 - 支持丰富且灵活的 `loaders` 和 `plugins`
 - 支持 `alias`
 - 支持 `sass、less`
+- 支持引入npm自定义组件
 
 
 ###### 为什么要使用这个插件
@@ -71,7 +72,9 @@ export default {
 ## 提示
 
 - 程序的开发方式与 [微信小程序开发文档](https://mp.weixin.qq.com/debug/wxadoc/dev/) 一样，开发者需要在 `src` （源）目录创建 `app.js`、`app.json`、`app.wxss`、`pages/index/index.js` 之类的文件进行开发
+- 引入node_modules的包，只需要`usingComponents`中对应组件增加`/npm-components`这个前缀，打包出来会提取`node_modules`中的组定义组件到输出目录`npm-components`文件夹
 
+****
 
 ## License
 
