@@ -310,12 +310,12 @@ module.exports = class MiniProgramWebpackPlugin {
 			...entries.map(resource => {
 				return {
 					from: resource,
-					to: resource.replace(`${this.basePath}/`, '').replace(`${process.cwd()}/`, '')
+					to: resource.replace(`${this.basePath.replace(/\\/g, '/')}/`, '').replace(`${process.cwd().replace(/\\/g, '/')}/`, '')
 				};
 			}),
 			...this.appEntries.tabBarAssets.map(resource => {
 				return {
-					from: path.resolve(this.basePath, resource),
+					from: path.resolve(this.basePath.replace(/\\/g, '/'), resource),
 					to: resource
 				};
 			})],
