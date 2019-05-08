@@ -83,14 +83,9 @@ module.exports = class MiniProgramWebpackPlugin {
 					)
 				);
 				const source = new ConcatSource(modules);
-				console.log(requireModule)
-				console.log(chunk.name)
 				requireModule.forEach(module => {
 					if (this.chunkMap[module]) {
-						let chunkName = chunk.name
-						if (chunk.name.indexOf('/node_modules') === 0) {
-							chunkName = chunkName.substring(1)
-						}
+						const chunkName = chunk.name;
 						source.add(
 							`;require("${path
 								.relative(path.dirname(chunkName), this.chunkMap[module])
@@ -105,9 +100,8 @@ module.exports = class MiniProgramWebpackPlugin {
 		compilation.hooks.afterOptimizeChunkIds.tap(pluginName, chunks => {
 			this.chunkMap = chunks.reduce((acc, item) => {
 				acc[item.id] = item.name;
-				return acc
+				return acc;
 			}, {});
-			console.log(this.chunkMap)
 		});
 
 		// splice assets module
@@ -290,7 +284,7 @@ module.exports = class MiniProgramWebpackPlugin {
 					new SingleEntryPlugin(
 						this.basePath,
 						path.join(process.cwd(), resource),
-						resource
+						resource.replace(/node_modules/, "npm-components")
 					).apply(compiler);
 				} else {
 					const fullPath = this.getFullScriptPath(resource);
@@ -331,6 +325,7 @@ module.exports = class MiniProgramWebpackPlugin {
 						to: resource
 							.replace(`${this.basePath.replace(/\\/g, "/")}/`, "")
 							.replace(`${process.cwd().replace(/\\/g, "/")}/`, "")
+							.replace(/node_modules/, "npm-components")
 					};
 				}),
 				...this.appEntries.tabBarAssets.map(resource => {
@@ -359,10 +354,16 @@ module.exports = class MiniProgramWebpackPlugin {
 				if (c.indexOf("plugin://") === 0) {
 					break;
 				}
-				if (c.indexOf("/node_modules") === 0 && !this.npmComponts.has(c)) {
-					this.npmComponts.add(c);
-					components.add(c);
-					this.getComponents(components, path.resolve(process.cwd(), c));
+				if (c.indexOf("/npm-components") === 0) {
+					const component = c.replace(/\/npm-components/, "node_modules");
+					if (!this.npmComponts.has(component)) {
+						this.npmComponts.add(component);
+						components.add(component);
+						this.getComponents(
+							components,
+							path.resolve(process.cwd(), component)
+						);
+					}
 					break;
 				}
 				const component = path.resolve(instanceDir, c);
