@@ -328,7 +328,7 @@ module.exports = class MiniProgramWebpackPlugin {
 				ignore: [
 					...extensions.map(ext => `**/*${ext}`),
 					...exclude,
-					...["sass", "scss", "css", "less", "styl"]
+					...["*.sass", "*.scss", "*.css", "*.less", "*.styl"]
 				]
 			}
 		).apply(compiler);
