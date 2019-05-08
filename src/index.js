@@ -1,29 +1,29 @@
-const path = require('path');
-const fsExtra = require('fs-extra');
-const globby = require('globby');
-const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin');
-const { optimize } = require('webpack');
-const LoaderTargetPlugin = require('webpack/lib/LoaderTargetPlugin');
-const FunctionModulePlugin = require('webpack/lib/FunctionModulePlugin');
-const NodeSourcePlugin = require('webpack/lib/node/NodeSourcePlugin');
-const JsonpTemplatePlugin = require('webpack/lib/web/JsonpTemplatePlugin');
-const CopyWebpackPlugin = require('copy-webpack-plugin');
-const { ConcatSource } = require('webpack-sources');
+const path = require("path");
+const fsExtra = require("fs-extra");
+const globby = require("globby");
+const SingleEntryPlugin = require("webpack/lib/SingleEntryPlugin");
+const { optimize } = require("webpack");
+const LoaderTargetPlugin = require("webpack/lib/LoaderTargetPlugin");
+const FunctionModulePlugin = require("webpack/lib/FunctionModulePlugin");
+const NodeSourcePlugin = require("webpack/lib/node/NodeSourcePlugin");
+const JsonpTemplatePlugin = require("webpack/lib/web/JsonpTemplatePlugin");
+const CopyWebpackPlugin = require("copy-webpack-plugin");
+const { ConcatSource } = require("webpack-sources");
 
-const pluginName = 'MiniProgramWebpackPlugin';
+const pluginName = "MiniProgramWebpackPlugin";
 module.exports = class MiniProgramWebpackPlugin {
 	constructor(options = {}) {
 		this.options = Object.assign(
 			{},
 			{
 				clear: true,
-				extensions: ['.js', '.ts'], // script ext
-				include: ['.wxml', '.wxss', '.json'], // include assets file
+				extensions: [".js", ".ts"], // script ext
+				include: [".wxml", ".wxss", ".json"], // include assets file
 				exclude: [], // ignore assets file
-				assetsChunkName: '__assets_chunk__',
-				commonsChunkName: 'commons',
-				vendorChunkName: 'vendor',
-				runtimeChunkName: 'runtime'
+				assetsChunkName: "__assets_chunk__",
+				commonsChunkName: "commons",
+				vendorChunkName: "vendor",
+				runtimeChunkName: "runtime"
 			},
 			options
 		);
@@ -78,17 +78,23 @@ module.exports = class MiniProgramWebpackPlugin {
 					children[Object.keys(children).pop()].generatedCode;
 				const requireModule = JSON.parse(
 					generatedCode.substring(
-						generatedCode.indexOf(',') + 2,
+						generatedCode.indexOf(",") + 2,
 						generatedCode.length - 3
 					)
 				);
 				const source = new ConcatSource(modules);
+				console.log(requireModule)
+				console.log(chunk.name)
 				requireModule.forEach(module => {
 					if (this.chunkMap[module]) {
+						let chunkName = chunk.name
+						if (chunk.name.indexOf('/node_modules') === 0) {
+							chunkName = chunkName.substring(1)
+						}
 						source.add(
 							`;require("${path
-								.relative(path.dirname(chunk.name), this.chunkMap[module])
-								.replace(/\\/g, '/')}")`
+								.relative(path.dirname(chunkName), this.chunkMap[module])
+								.replace(/\\/g, "/")}")`
 						);
 					}
 				});
@@ -97,10 +103,11 @@ module.exports = class MiniProgramWebpackPlugin {
 		);
 
 		compilation.hooks.afterOptimizeChunkIds.tap(pluginName, chunks => {
-			this.chunkMap = {};
-			chunks.forEach(item => {
-				this.chunkMap[item.id] = item.name;
-			});
+			this.chunkMap = chunks.reduce((acc, item) => {
+				acc[item.id] = item.name;
+				return acc
+			}, {});
+			console.log(this.chunkMap)
 		});
 
 		// splice assets module
@@ -117,7 +124,7 @@ module.exports = class MiniProgramWebpackPlugin {
 	setBasePath(compiler) {
 		const appEntry = compiler.options.entry.app;
 		if (!appEntry) {
-			throw new TypeError('Entry invalid.');
+			throw new TypeError("Entry invalid.");
 		}
 		this.basePath = path.resolve(path.dirname(appEntry));
 	}
@@ -125,7 +132,7 @@ module.exports = class MiniProgramWebpackPlugin {
 	async enforceTarget(compiler) {
 		const { options } = compiler;
 		// set jsonp obj motuned obj
-		options.output.globalObject = 'global';
+		options.output.globalObject = "global";
 		options.node = {
 			...(options.node || {}),
 			global: false
@@ -136,7 +143,7 @@ module.exports = class MiniProgramWebpackPlugin {
 			new JsonpTemplatePlugin(options.output).apply(compiler);
 			new FunctionModulePlugin(options.output).apply(compiler);
 			new NodeSourcePlugin(options.node).apply(compiler);
-			new LoaderTargetPlugin('web').apply(compiler);
+			new LoaderTargetPlugin("web").apply(compiler);
 		};
 	}
 
@@ -153,7 +160,7 @@ module.exports = class MiniProgramWebpackPlugin {
 	// resolve tabbar page compoments
 	async resolveAppEntries() {
 		const { tabBar = {}, pages = [], subpackages = [] } = fsExtra.readJSONSync(
-			path.resolve(this.basePath, 'app.json')
+			path.resolve(this.basePath, "app.json")
 		);
 
 		let tabBarAssets = new Set();
@@ -183,7 +190,7 @@ module.exports = class MiniProgramWebpackPlugin {
 		}
 
 		// add app.[ts/js]
-		pages.push('app');
+		pages.push("app");
 
 		// resolve page components
 		for (const page of pages) {
@@ -238,25 +245,25 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		new optimize.SplitChunksPlugin({
 			hidePathInfo: false,
-			chunks: 'async',
+			chunks: "async",
 			minSize: 10000,
 			minChunks: 1,
 			maxAsyncRequests: Infinity,
-			automaticNameDelimiter: '~',
+			automaticNameDelimiter: "~",
 			maxInitialRequests: Infinity,
 			name: true,
 			cacheGroups: {
 				default: false,
 				// node_modules
 				vendor: {
-					chunks: 'all',
+					chunks: "all",
 					test: /[\\/]node_modules[\\/]/,
 					name: vendorChunkName,
 					minChunks: 0
 				},
 				// 其他公用代码
 				common: {
-					chunks: 'all',
+					chunks: "all",
 					test: /[\\/]src[\\/]/,
 					minChunks: 2,
 					name({ context }) {
@@ -277,14 +284,20 @@ module.exports = class MiniProgramWebpackPlugin {
 	// add script entry
 	async addScriptEntry(compiler) {
 		this.appEntries
-			.filter(resource => resource !== 'app')
+			.filter(resource => resource !== "app")
 			.forEach(resource => {
 				if (this.npmComponts.has(resource)) {
-					new SingleEntryPlugin(this.basePath, path.join(process.cwd(), resource), resource).apply(compiler);
+					new SingleEntryPlugin(
+						this.basePath,
+						path.join(process.cwd(), resource),
+						resource
+					).apply(compiler);
 				} else {
 					const fullPath = this.getFullScriptPath(resource);
 					if (fullPath) {
-						new SingleEntryPlugin(this.basePath, fullPath, resource).apply(compiler);
+						new SingleEntryPlugin(this.basePath, fullPath, resource).apply(
+							compiler
+						);
 					} else {
 						console.warn(`file ${resource} is exists`);
 					}
@@ -297,7 +310,11 @@ module.exports = class MiniProgramWebpackPlugin {
 		const { include, exclude, extensions } = this.options;
 		const patterns = this.appEntries
 			.map(resource => path.resolve(this.basePath, `${resource}.*`))
-			.concat([...this.npmComponts].map(resource => path.join(process.cwd(), `${resource}.*`)))
+			.concat(
+				[...this.npmComponts].map(resource =>
+					path.join(process.cwd(), `${resource}.*`)
+				)
+			)
 			.concat(include);
 		const entries = await globby(patterns, {
 			cwd: this.basePath,
@@ -306,22 +323,31 @@ module.exports = class MiniProgramWebpackPlugin {
 			ignore: [...extensions.map(ext => `**/*${ext}`), ...exclude],
 			dot: false
 		});
-		new CopyWebpackPlugin([
-			...entries.map(resource => {
-				return {
-					from: resource,
-					to: resource.replace(`${this.basePath.replace(/\\/g, '/')}/`, '').replace(`${process.cwd().replace(/\\/g, '/')}/`, '')
-				};
-			}),
-			...this.appEntries.tabBarAssets.map(resource => {
-				return {
-					from: path.resolve(this.basePath.replace(/\\/g, '/'), resource),
-					to: resource
-				};
-			})],
-		{
-			ignore: [...extensions.map(ext => `**/*${ext}`), ...exclude, ...['sass', 'scss', 'css', 'less', 'styl']]
-		}).apply(compiler);
+		new CopyWebpackPlugin(
+			[
+				...entries.map(resource => {
+					return {
+						from: resource,
+						to: resource
+							.replace(`${this.basePath.replace(/\\/g, "/")}/`, "")
+							.replace(`${process.cwd().replace(/\\/g, "/")}/`, "")
+					};
+				}),
+				...this.appEntries.tabBarAssets.map(resource => {
+					return {
+						from: path.resolve(this.basePath.replace(/\\/g, "/"), resource),
+						to: resource
+					};
+				})
+			],
+			{
+				ignore: [
+					...extensions.map(ext => `**/*${ext}`),
+					...exclude,
+					...["sass", "scss", "css", "less", "styl"]
+				]
+			}
+		).apply(compiler);
 	}
 
 	// parse components
@@ -330,10 +356,10 @@ module.exports = class MiniProgramWebpackPlugin {
 			const { usingComponents = {} } = fsExtra.readJSONSync(`${instance}.json`);
 			const instanceDir = path.parse(instance).dir;
 			for (const c of Object.values(usingComponents)) {
-				if (c.indexOf('plugin://') === 0) {
+				if (c.indexOf("plugin://") === 0) {
 					break;
 				}
-				if (c.indexOf('/node_modules') === 0 && !this.npmComponts.has(c)) {
+				if (c.indexOf("/node_modules") === 0 && !this.npmComponts.has(c)) {
 					this.npmComponts.add(c);
 					components.add(c);
 					this.getComponents(components, path.resolve(process.cwd(), c));
@@ -345,7 +371,7 @@ module.exports = class MiniProgramWebpackPlugin {
 					await this.getComponents(components, component);
 				}
 			}
-		} catch (error) { }
+		} catch (error) {}
 	}
 
 	// script full path
