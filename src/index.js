@@ -2,6 +2,7 @@ const path = require("path");
 const fsExtra = require("fs-extra");
 const globby = require("globby");
 const SingleEntryPlugin = require("webpack/lib/SingleEntryPlugin");
+const MultiEntryPlugin = require("webpack/lib/MultiEntryPlugin");
 const { optimize } = require("webpack");
 const LoaderTargetPlugin = require("webpack/lib/LoaderTargetPlugin");
 const FunctionModulePlugin = require("webpack/lib/FunctionModulePlugin");
@@ -18,8 +19,9 @@ module.exports = class MiniProgramWebpackPlugin {
 			{
 				clear: true,
 				extensions: [".js", ".ts"], // script ext
-				include: [".wxml", ".wxss", ".json"], // include assets file
+				include: [], // include assets file
 				exclude: [], // ignore assets file
+				assetsChunkName: "__assets_chunk__",
 				commonsChunkName: "commons",
 				vendorChunkName: "vendor",
 				runtimeChunkName: "runtime"
@@ -52,20 +54,20 @@ module.exports = class MiniProgramWebpackPlugin {
 
 		compiler.hooks.compilation.tap(
 			pluginName,
-			this.compilationHooks.bind(this)
+			catchError(compilation => this.compilationHooks(compilation))
 		);
 
-		compiler.hooks.emit.tapPromise(pluginName, async compilation => {
-			try {
+		compiler.hooks.emit.tapPromise(
+			pluginName,
+			catchError(async compilation => {
 				const { clear } = this.options;
 				if (clear && !this.firstClean) {
 					this.firstClean = true;
 					await MiniProgramWebpackPlugin.clearOutPut(compilation);
 				}
-			} catch (error) {
-				console.warn(error);
-			}
-		});
+				await this.emitAssetsFile(compilation);
+			})
+		);
 	}
 
 	compilationHooks(compilation) {
@@ -102,6 +104,16 @@ module.exports = class MiniProgramWebpackPlugin {
 				return acc;
 			}, {});
 		});
+
+		// splice assets module
+		compilation.hooks.beforeChunkAssets.tap(pluginName, () => {
+			const assetsChunkIndex = compilation.chunks.findIndex(
+				({ name }) => name === this.options.assetsChunkName
+			);
+			if (assetsChunkIndex > -1) {
+				compilation.chunks.splice(assetsChunkIndex, 1);
+			}
+		});
 	}
 
 	setBasePath(compiler) {
@@ -135,7 +147,7 @@ module.exports = class MiniProgramWebpackPlugin {
 		this.appEntries = await this.resolveAppEntries();
 		await Promise.all([
 			this.addScriptEntry(compiler),
-			this.copyAssetsFile(compiler)
+			this.addAssetsEntries(compiler)
 		]);
 		this.applyPlugin(compiler);
 	}
@@ -288,16 +300,11 @@ module.exports = class MiniProgramWebpackPlugin {
 			});
 	}
 
-	// copy assets file
-	async copyAssetsFile(compiler) {
-		const { include, exclude, extensions } = this.options;
+	// add assets entry
+	async addAssetsEntries(compiler) {
+		const { include, exclude, extensions, assetsChunkName } = this.options;
 		const patterns = this.appEntries
-			.map(resource => path.resolve(this.basePath, `${resource}.*`))
-			.concat(
-				[...this.npmComponts].map(resource =>
-					path.join(process.cwd(), `${resource}.*`)
-				)
-			)
+			.map(resource => `${resource}.*`)
 			.concat(include);
 		const entries = await globby(patterns, {
 			cwd: this.basePath,
@@ -306,32 +313,60 @@ module.exports = class MiniProgramWebpackPlugin {
 			ignore: [...extensions.map(ext => `**/*${ext}`), ...exclude],
 			dot: false
 		});
+
+		this.assetsEntry = [...entries, ...this.appEntries.tabBarAssets];
+		new MultiEntryPlugin(
+			this.basePath,
+			this.assetsEntry,
+			assetsChunkName
+		).apply(compiler);
+
+
+		const npmAssetsEntry = await globby(
+			[...this.npmComponts]
+				.map(resource => `${path.parse(resource).dir}/**/*.*`)
+				.concat(include),
+			{
+				cwd: process.cwd(),
+				nodir: true,
+				realpath: false,
+				ignore: [...extensions.map(ext => `**/*${ext}`), ...exclude],
+				dot: false
+			}
+		);
 		new CopyWebpackPlugin(
 			[
-				...entries.map(resource => {
+				...npmAssetsEntry.map(resource => {
 					return {
-						from: resource,
-						to: resource
-							.replace(`${this.basePath.replace(/\\/g, "/")}/`, "")
-							.replace(`${process.cwd().replace(/\\/g, "/")}/`, "")
-							.replace(/node_modules/, "npm-components")
-					};
-				}),
-				...this.appEntries.tabBarAssets.map(resource => {
-					return {
-						from: path.resolve(this.basePath.replace(/\\/g, "/"), resource),
-						to: resource
+						from: path.resolve(process.cwd().replace(/\\/g, "/"), resource),
+						to: resource.replace(/node_modules/, "npm-components")
 					};
 				})
 			],
 			{
-				ignore: [
-					...extensions.map(ext => `**/*${ext}`),
-					...exclude,
-					...["*.sass", "*.scss", "*.css", "*.less", "*.styl"]
-				]
+				ignore: [...extensions.map(ext => `**/*${ext}`), ...exclude]
 			}
 		).apply(compiler);
+	}
+
+	async emitAssetsFile(compilation) {
+		const emitAssets = [];
+		for (let entry of this.assetsEntry) {
+			const assets = path.resolve(this.basePath, entry);
+			if (/\.(sass|scss|css|less|styl)$/.test(assets)) {
+				continue;
+			}
+			const toTmit = async () => {
+				const stat = await fsExtra.stat(assets);
+				const source = await fsExtra.readFile(assets);
+				compilation.assets[entry] = {
+					size: () => stat.size,
+					source: () => source
+				};
+			};
+			emitAssets.push(toTmit());
+		}
+		await Promise.all(emitAssets);
 	}
 
 	// parse components
