@@ -82,7 +82,7 @@ module.exports = class MiniProgramWebpackPlugin {
 						generatedCode.indexOf(",") + 2,
 						generatedCode.length - 3
 					)
-				);
+				).slice(1);
 				const source = new ConcatSource(modules);
 				requireModule.forEach(module => {
 					if (this.chunkMap[module]) {
@@ -320,7 +320,6 @@ module.exports = class MiniProgramWebpackPlugin {
 			this.assetsEntry,
 			assetsChunkName
 		).apply(compiler);
-
 
 		const npmAssetsEntry = await globby(
 			[...this.npmComponts]
